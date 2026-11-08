@@ -31,7 +31,7 @@ public class MainActivity extends Activity {
     private String saveOutputId;
     private WApp app(){return (WApp)getApplication();}
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);sharedIntent=getIntent();voice=new Voice(this);
+        super.onCreate(saved);sharedIntent=getIntent();voice=new Voice(this,(state,text)->{if(web!=null)web.evaluateJavascript("window.voiceUpdate && window.voiceUpdate("+JSONObject.quote(state)+","+JSONObject.quote(text)+")",null);});
         web=new WebView(this);web.setBackgroundColor(Color.rgb(245,244,240));setContentView(web);
         applyTheme();
         if(Build.VERSION.SDK_INT>=35){getWindow().setDecorFitsSystemWindows(false);web.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});}
@@ -60,11 +60,12 @@ public class MainActivity extends Activity {
     }
     @Override protected void onResume(){super.onResume();foreground=new java.lang.ref.WeakReference<>(this);if(web!=null)web.onResume();}
     private void applyTheme(){runOnUiThread(()->{
-        boolean dark="dark".equals(app().vault.get().optString("theme"));int background=dark?(app().vault.get().optBoolean("amoled")?Color.BLACK:Color.rgb(17,24,39)):Color.WHITE;
+        boolean dark="dark".equals(app().vault.get().optString("theme"));int background=dark?(app().vault.get().optBoolean("amoled")?Color.BLACK:Color.rgb(23,27,24)):Color.rgb(245,244,240);
         getWindow().setStatusBarColor(background);getWindow().setNavigationBarColor(background);if(web!=null)web.setBackgroundColor(background);
         getWindow().getDecorView().setBackgroundColor(background);
         if(Build.VERSION.SDK_INT>=30){WindowInsetsController c=getWindow().getInsetsController();if(c!=null)c.setSystemBarsAppearance(dark?0:WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);}else{int flags=getWindow().getDecorView().getSystemUiVisibility();int mask=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;getWindow().getDecorView().setSystemUiVisibility(dark?flags&~mask:flags|mask);}
     });}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==5&&voice!=null)voice.permissionResult(grants);}
     @Override protected void onPause(){foreground.clear();if(web!=null)web.onPause();super.onPause();}
     public static boolean approve(String title,String detail) throws Exception {
         MainActivity a=foreground.get();if(a==null)throw new IllegalStateException("Откройте W Agent для подтверждения действия сервиса");
@@ -86,7 +87,7 @@ public class MainActivity extends Activity {
             io.execute(()->{String id="";try{JSONObject req=new JSONObject(raw);id=req.getString("id");String op=req.getString("op");JSONObject args=req.optJSONObject("args");if(args==null)args=new JSONObject();Object result=null;
                 switch(op){
                     case "shared":result=shared();break;
-                    case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");if(Build.VERSION.SDK_INT>=31)visible.put("systemAccent",String.format("#%06X",getColor(android.R.color.system_accent1_600)&0xffffff));if(!visible.has("roles"))visible.put("roles",Roles.presets());result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("device",DeviceStatus.get(MainActivity.this)).put("run",app().agent.state()).put("version",getPackageManager().getPackageInfo(getPackageName(),0).versionName);break;}
+                    case "init":{app().workspace();JSONObject visible=app().vault.get();visible.remove("pendingAuth");if(Build.VERSION.SDK_INT>=31)visible.put("systemAccent",String.format("#%06X",getColor(android.R.color.system_accent1_600)&0xffffff));if(!visible.has("roles"))visible.put("roles",Roles.presets());result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("device",DeviceStatus.get(MainActivity.this)).put("run",app().agent.state()).put("version",getPackageManager().getPackageInfo(getPackageName(),0).versionName);break;}
                     case "state":result=new JSONObject().put("run",app().agent.state()).put("device",DeviceStatus.get(MainActivity.this)).put("accessibility",DeviceService.live!=null);break;
                     case "reconnect":handler.post(()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));result=true;break;
                     case "deviceTest":{
@@ -96,6 +97,7 @@ public class MainActivity extends Activity {
                     case "save":app().vault.updateSettings(args);applyTheme();result=true;break;
                     case "voiceListen":{String callback=id;handler.post(()->voice.listen((text,error)->reply(callback,text,error)));return;}
                     case "voiceSpeak":{String callback=id,text=args.getString("text");handler.post(()->voice.speak(text,(value,error)->reply(callback,value,error)));return;}
+                    case "voiceFinish":handler.post(voice::finishListening);result=true;break;
                     case "voiceStop":handler.post(voice::stop);result=true;break;
                     case "compactContext":result=app().agent.compact();break;
                     case "projectRead":result=new Project(app()).execute(args.put("action","read_file"));break;
@@ -105,7 +107,7 @@ public class MainActivity extends Activity {
                     }
                     case "checkpointRollback":if(!approve("Откатить файл?","Восстановить содержимое до выбранной правки?"))throw new IllegalStateException("Откат отклонён");result=new Project(app()).rollback(args.getString("id"));break;
                     case "memoryDelete":{synchronized(app().vault){JSONArray a=app().vault.get().optJSONArray("memories");if(a!=null)for(int n=0;n<a.length();n++)if(args.getString("id").equals(a.getJSONObject(n).optString("id"))){a.remove(n);break;}app().vault.patch("memories",a==null?new JSONArray():a);}result=true;break;}
-                    case "ptyOpen":if(!approve("Открыть интерактивный Linux-терминал?","Введённые вами команды выполняются сразу с правами W Agent, без отдельных подтверждений. Модель не имеет доступа к этому вводу."))throw new IOException("Терминал не открыт");result=app().terminal().open(args.optInt("cols",80),args.optInt("rows",24));break;
+                    case "ptyOpen":result=app().terminal().open(args.optInt("cols",80),args.optInt("rows",24));break;
                     case "ptyPoll":result=app().terminal().state(args.optLong("cursor",0));break;
                     case "ptyInput":app().terminal().input(args.getString("text"));result=true;break;
                     case "ptyResize":app().terminal().resize(args.optInt("cols",80),args.optInt("rows",24));result=true;break;
@@ -124,6 +126,7 @@ public class MainActivity extends Activity {
                     case "stop":app().agent.stop();result=true;break;
                     case "newChat":app().agent.newChat();result=true;break;
                     case "chatSelect":app().agent.selectChat(args.getString("chatId"));result=true;break;
+                    case "clipboardText":{String callback=id;handler.post(()->{android.content.ClipboardManager clipboard=getSystemService(android.content.ClipboardManager.class);ClipData clip=clipboard.getPrimaryClip();CharSequence text=clip!=null&&clip.getItemCount()>0?clip.getItemAt(0).coerceToText(MainActivity.this):"";reply(callback,text==null?"":text.toString(),null);});return;}
                     case "copyText":{String value=args.getString("text");handler.post(()->getSystemService(android.content.ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("W Agent",value)));result=true;break;}
                     case "folders":result=new FilesStore(app()).folders();break;
                     case "folderRemove":new FilesStore(app()).removeFolder(args.getString("id"));result=true;break;
