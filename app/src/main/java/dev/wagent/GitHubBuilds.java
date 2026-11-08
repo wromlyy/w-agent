@@ -10,7 +10,7 @@ public final class GitHubBuilds {
     private final WApp app;
     public GitHubBuilds(WApp app){this.app=app;}
     public static String repo(String raw){if(!raw.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")||raw.contains(".."))throw new IllegalArgumentException("Репозиторий: owner/repo");return raw;}
-    private static String segment(String value){return java.net.URLEncoder.encode(value,java.nio.charset.StandardCharsets.UTF_8).replace("+","%20");}
+    private static String segment(String value)throws java.io.UnsupportedEncodingException{return java.net.URLEncoder.encode(value,"UTF-8").replace("+","%20");}
     public static JSONObject connection(JSONObject settings,String id)throws Exception{
         JSONArray a=settings.getJSONArray("services");for(int i=0;i<a.length();i++){JSONObject s=a.getJSONObject(i);if(id.equals(s.optString("id"))&&s.optBoolean("enabled",true)&&"https://api.github.com".equals(s.optString("url").replaceAll("/+$","")))return s;}throw new IllegalArgumentException("Подключите GitHub REST API в Связи → Сервисы");
     }
