@@ -38,7 +38,7 @@ public class DeviceService extends AccessibilityService {
     public String screen() throws Exception {return ui(()->{
         clearNodes();JSONObject s=new JSONObject();JSONArray items=new JSONArray();
         AccessibilityNodeInfo root=getRootInActiveWindow();
-        if(root!=null){s.put("package",String.valueOf(root.getPackageName()));walk(root,items,0);root.recycle();}
+        if(root!=null){AppPolicy.check(((WApp)getApplication()).vault.get(),String.valueOf(root.getPackageName()));s.put("package",String.valueOf(root.getPackageName()));walk(root,items,0);root.recycle();}
         else s.put("notice","Экран недоступен. Откройте приложение или разблокируйте телефон вручную.");
         android.util.DisplayMetrics dm=getResources().getDisplayMetrics();
         return s.put("width",dm.widthPixels).put("height",dm.heightPixels).put("elements",items).toString();
@@ -69,10 +69,11 @@ public class DeviceService extends AccessibilityService {
                 if(!approve("Подтвердите действие",label))return "Пользователь отклонил действие. Не повторяй его.";
         }
         return ui(()->{
+            {AccessibilityNodeInfo policyRoot=getRootInActiveWindow();if(policyRoot!=null){try{AppPolicy.check(((WApp)getApplication()).vault.get(),String.valueOf(policyRoot.getPackageName()));}finally{policyRoot.recycle();}}}
             AccessibilityNodeInfo n=nodes.get(a.optInt("id",-1));
             switch(op){
                 case "open_app": {
-                    Intent i=getPackageManager().getLaunchIntentForPackage(a.getString("package"));
+                    AppPolicy.check(((WApp)getApplication()).vault.get(),a.getString("package"));Intent i=getPackageManager().getLaunchIntentForPackage(a.getString("package"));
                     if(i==null)throw new IllegalArgumentException("Приложение не установлено или не доступно для запуска");
                     startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return "Приложение открыто";
                 }
@@ -117,6 +118,7 @@ public class DeviceService extends AccessibilityService {
     }
     public String screenshot() throws Exception {
         if(Build.VERSION.SDK_INT<30)return null;
+        ui(()->{AccessibilityNodeInfo root=getRootInActiveWindow();if(root!=null){try{AppPolicy.check(((WApp)getApplication()).vault.get(),String.valueOf(root.getPackageName()));}finally{root.recycle();}}return null;});
         CompletableFuture<String> result=new CompletableFuture<>();
         ui(()->{takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),new TakeScreenshotCallback(){
             @Override public void onSuccess(ScreenshotResult shot){

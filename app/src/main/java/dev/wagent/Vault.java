@@ -52,7 +52,7 @@ public final class Vault {
     public synchronized void updateSettings(JSONObject settings) throws Exception {
         JSONObject next = get();
         if(settings.has("roles"))Roles.validate(settings.getJSONArray("roles"));
-        for (String k : new String[]{"profiles", "services", "skills", "activeProfile", "vision", "theme", "maxSteps", "maxSeconds", "maxTokens", "doubleCheck", "teamMode", "agentMode", "projectFolder", "roles", "activeRole", "searchService", "prompts", "fontSize", "density", "accent", "amoled", "materialYou"}) if (settings.has(k)) next.put(k, settings.get(k));
+        for (String k : new String[]{"profiles", "services", "skills", "activeProfile", "vision", "theme", "maxSteps", "maxSeconds", "maxTokens", "doubleCheck", "teamMode", "agentMode", "projectFolder", "roles", "activeRole", "searchService", "prompts", "fontSize", "density", "accent", "amoled", "materialYou", "blockedApps", "allowedApps"}) if (settings.has(k)) next.put(k, settings.get(k));
         save(next);
     }
     public synchronized void patch(String key,Object value)throws Exception{save(get().put(key,value));}

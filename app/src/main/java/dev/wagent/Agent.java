@@ -126,7 +126,7 @@ public final class Agent implements Net.Cancel {
                 for(int i=0;i<calls.length();i++){
                     check();JSONObject call=calls.getJSONObject(i),f=call.getJSONObject("function");String name=f.getString("name"),result;
                     JSONObject args=new JSONObject(f.getString("arguments"));
-                    event("action",describe(name,args));
+                    event("action",describe(name,args)+"\n"+args.toString());
                     try{String blocked=guard.action(name,args);result=blocked==null?tool(name,args,settings):blocked;}catch(InterruptedException|RunGuard.Limit e){throw e;}catch(Exception e){result="Ошибка: "+e.getMessage();event("notice",result);}
                     event("result",result.length()>12000?result.substring(0,12000)+"\n[сокращено]":result);
                     check();messages.put(new JSONObject().put("role","tool").put("tool_call_id",call.getString("id")).put("content",redact(result)));
