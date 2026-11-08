@@ -42,6 +42,15 @@ public class ApiContractTest {
         assertEquals("c1",answer.getJSONArray("tool_calls").getJSONObject(0).getString("id"));
         Mock r=sent.get(0);assertEquals("/v1/chat/completions",r.getURL().getPath());assertEquals("Bearer test-secret",r.getRequestProperty("Authorization"));assertFalse(r.json().toString().contains("test-secret"));assertFalse(r.json().getBoolean("parallel_tool_calls"));
     }
+    @Test public void textOnlyAttachmentsUseStringsForCompatibleProvidersAndKeepImages()throws Exception{
+        JSONArray ms=messages();ms.getJSONObject(1).put("content",new JSONArray().put(new JSONObject().put("type","text").put("text","task")).put(new JSONObject().put("type","text").put("text","file content")));
+        respond("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ok\"}}]}");Models.complete(profile("compatible"),ms,tools(),()->false);
+        assertEquals("task\nfile content",sent.get(0).json().getJSONArray("messages").getJSONObject(1).getString("content"));
+        assertTrue(ms.getJSONObject(1).get("content") instanceof JSONArray);
+        ms.getJSONObject(1).getJSONArray("content").put(new JSONObject().put("type","image_url").put("image_url",new JSONObject().put("url","data:image/png;base64,YQ==")));
+        respond("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ok\"}}]}");Models.complete(profile("compatible"),ms,tools(),()->false);
+        assertTrue(sent.get(1).json().getJSONArray("messages").getJSONObject(1).get("content") instanceof JSONArray);
+    }
     @Test public void anthropicTranslatesImagesToolUseAndToolResults()throws Exception{
         respond("{\"content\":[{\"type\":\"text\",\"text\":\"Reading\"},{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"device\",\"input\":{\"action\":\"read_screen\"}}]}");
         JSONArray ms=messages();ms.getJSONObject(1).put("content",new JSONArray("[{\"type\":\"text\",\"text\":\"Look\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,YQ==\"}}]"));

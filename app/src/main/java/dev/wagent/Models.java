@@ -12,7 +12,15 @@ public final class Models {
         if(p.optBoolean("freeOnly")&&(!"compatible".equals(type)||!"https://openrouter.ai/api/v1".equals(base.replaceAll("/+$",""))))throw new IllegalArgumentException("Бесплатное подключение использует OpenRouter и OpenAI-совместимый формат");
         if("anthropic".equals(type))return anthropic(base,key,model,messages,tools,cancel);
         if("gemini".equals(type))return gemini(base,key,model,messages,tools,cancel);
-        JSONObject request=new JSONObject().put("model",model).put("messages",messages);
+        JSONArray compatibleMessages=new JSONArray(messages.toString());
+        for(int i=0;i<compatibleMessages.length();i++){
+            JSONObject message=compatibleMessages.getJSONObject(i);JSONArray parts=message.optJSONArray("content");
+            if(parts==null)continue;
+            boolean textOnly=true;StringBuilder text=new StringBuilder();
+            for(int j=0;j<parts.length();j++){JSONObject part=parts.getJSONObject(j);if(!"text".equals(part.optString("type"))){textOnly=false;break;}if(text.length()>0)text.append('\n');text.append(part.optString("text"));}
+            if(textOnly)message.put("content",text.toString());
+        }
+        JSONObject request=new JSONObject().put("model",model).put("messages",compatibleMessages);
         if(tools.length()>0)request.put("tools",tools).put("parallel_tool_calls",false);
         if(p.optBoolean("freeOnly")) {
             if(!"https://openrouter.ai/api/v1".equals(base.replaceAll("/+$","")))throw new IllegalArgumentException("Бесплатное подключение использует OpenRouter");

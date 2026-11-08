@@ -37,7 +37,8 @@ public final class Net {
             if(r.status<200||r.status>=300) {
                 String detail="";try {JSONObject e=new JSONObject(r.text).optJSONObject("error");if(e!=null)detail=e.optString("message","");}catch(Exception ignored){}
                 if(detail.length()>300)detail=detail.substring(0,300);
-                throw new IOException("HTTP "+r.status+(detail.isEmpty()?"":": "+detail));
+                String hint=switch(r.status){case 401->"Ключ или авторизация не приняты. Проверьте подключение.";case 402->"Провайдер требует доступный баланс или квоту. Для бесплатного доступа проверьте условия аккаунта и выбранную модель.";case 429->"Достигнут лимит запросов провайдера. Подождите или выберите другую доступную модель.";default->"";};
+                throw new IOException("HTTP "+r.status+(hint.isEmpty()?"":" · "+hint)+(detail.isEmpty()?"":": "+detail));
             }
             return r;
         } finally {watcher.interrupt();con.disconnect();}
