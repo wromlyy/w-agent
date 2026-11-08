@@ -15,6 +15,7 @@ public final class Agent implements Net.Cancel {
     private JSONObject role;
     private volatile boolean paused;
     private String lastScreen="";
+    private android.os.PowerManager.WakeLock taskWakeLock;
     private volatile CompletableFuture<String> planApproval;
     public Agent(WApp app){this.app=app;try{JSONObject state=app.vault.get();chatId=state.optString("currentChat",UUID.randomUUID().toString());app.vault.save(state.put("currentChat",chatId));restoreConversation();}catch(Exception e){chatId=UUID.randomUUID().toString();}}
     public boolean running(){return running;}
@@ -85,6 +86,7 @@ public final class Agent implements Net.Cancel {
     }
     private void execute(String task,JSONArray attachments,JSONObject settings,JSONObject profile) {
         String finalStatus="done";
+        try{android.os.PowerManager power=app.getSystemService(android.os.PowerManager.class);taskWakeLock=power.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"WAgent:task");taskWakeLock.acquire(Math.max(10000,Math.min(3600000,settings.optInt("maxSeconds",600)*1000L)));}catch(Exception ignored){}
         try{
             JSONArray macro=settings.optJSONArray("_macro");if(macro!=null){
                 event("status","Выполняется сохранённый сценарий без вызова модели");for(int i=0;i<macro.length();i++){check();JSONObject step=macro.getJSONObject(i),args=new JSONObject(step.getJSONObject("args").toString());String name=step.getString("tool"),blocked=guard.action(name,args);if(blocked!=null)throw new IllegalStateException(blocked);event("action",describe(name,args));String result=tool(name,args,settings);event("result",result);if(!successful(name,result))throw new IllegalStateException("Проверка сценария не прошла; выполнение остановлено. См. результат шага.");}event("assistant","Сценарий выполнен без обращения к модели. Результаты инструментов приведены выше.");return;
@@ -149,6 +151,7 @@ public final class Agent implements Net.Cancel {
         catch(InterruptedException e){finalStatus="stopped";event("notice","Задача остановлена");}
         catch(Exception e){finalStatus=cancel?"stopped":"error";event("notice",cancel?"Задача остановлена":String.valueOf(e.getMessage()));}
         finally{
+            if(taskWakeLock!=null&&taskWakeLock.isHeld())taskWakeLock.release();taskWakeLock=null;app.browser.reset();
             synchronized(this){try{
                 run.put("status",finalStatus).put("finished",System.currentTimeMillis());app.vault.history(new JSONObject(run.toString()));
                 conversation.put(new JSONObject().put("role","user").put("content",task));

@@ -21,6 +21,7 @@ public final class AgentBrowser {
     private final Set<String> validated=ConcurrentHashMap.newKeySet();
     private static final String PREVIEW="preview.wagent.local";
     public AgentBrowser(WApp app){this.app=app;}
+    public void reset(){main.post(()->{if(loading!=null){loading.completeExceptionally(new IOException("Сессия браузера завершена"));loading=null;}if(browser!=null){browser.stopLoading();browser.destroy();browser=null;}console.clear();validated.clear();});}
     private boolean local(){return browser!=null&&browser.getUrl()!=null&&PREVIEW.equals(Uri.parse(browser.getUrl()).getHost());}
     private void create(){
         if(browser!=null)return;browser=new WebView(app);WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSupportMultipleWindows(false);settings.setDomStorageEnabled(false);settings.setMediaPlaybackRequiresUserGesture(true);settings.setGeolocationEnabled(false);settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
