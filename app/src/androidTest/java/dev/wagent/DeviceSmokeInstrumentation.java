@@ -37,6 +37,8 @@ public final class DeviceSmokeInstrumentation extends Instrumentation {
             WApp app=(WApp)getTargetContext().getApplicationContext();FilesStore store=new FilesStore(app);JSONObject file=store.output("smoke.txt","W Agent file smoke");
             Uri output=Uri.parse("content://dev.wagent.files/output/"+file.getString("id"));
             try(InputStream in=getTargetContext().getContentResolver().openInputStream(output)){require(in!=null,"Shared file provider returned null");ByteArrayOutputStream bytes=new ByteArrayOutputStream();byte[] b=new byte[1024];int n;while((n=in.read(b))!=-1)bytes.write(b,0,n);require("W Agent file smoke".equals(bytes.toString("UTF-8")),"Shared file contents differ");}
+            JSONObject command=new JSONObject(app.shell.run("printf terminal-ok; printf stderr-ok >&2; exit 7","",10,()->false));require(command.getInt("exitCode")==7,"Shell exit code missing");require(command.getString("stdout").contains("terminal-ok"),"Shell stdout missing");require(command.getString("stderr").contains("stderr-ok"),"Shell stderr missing");
+            JSONObject timed=new JSONObject(app.shell.run("sleep 5","",1,()->false));require(timed.getBoolean("stopped"),"Shell timeout not enforced");
             app.agent.newChat();require(app.agent.state().has("chatId"),"Chat session missing");
             shell(automation,"settings put secure enabled_accessibility_services ''");Thread.sleep(600);
             require(DeviceService.live==null,"Disconnected service retained stale reference");

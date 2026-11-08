@@ -36,6 +36,13 @@ public class ApiContractTest {
     private JSONObject profile(String type)throws Exception{return new JSONObject().put("type",type).put("base","https://provider.test/v1").put("key","test-secret").put("model","test-model");}
     private JSONArray tools()throws Exception{return new JSONArray("[{\"type\":\"function\",\"function\":{\"name\":\"device\",\"description\":\"Device actions\",\"parameters\":{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\"}},\"required\":[\"action\"]}}}]");}
     private JSONArray messages()throws Exception{return new JSONArray("[{\"role\":\"system\",\"content\":\"You are W\"},{\"role\":\"user\",\"content\":\"Read screen\"}]");}
+    @Test public void workflowsDispatchAndRunStatusUseScopedGithubConnection()throws Exception{
+        JSONObject service=new JSONObject().put("id","gh").put("url","https://api.github.com").put("token","github-test"),settings=new JSONObject().put("services",new JSONArray().put(service));
+        JSONObject a=new JSONObject().put("connection","gh").put("repo","owner/project").put("workflow","android.yml").put("ref","main").put("action","dispatch");
+        responses.add(new Mock("",204,"application/json"));assertTrue(new GitHubBuilds(null).execute(settings,a,()->false).contains("НЕ означает"));assertEquals("main",sent.get(0).json().getString("ref"));assertEquals("Bearer github-test",sent.get(0).getRequestProperty("Authorization"));
+        respond("{\"status\":\"completed\",\"conclusion\":\"failure\"}");a.put("action","run").put("run_id",42);assertTrue(new GitHubBuilds(null).execute(settings,a,()->false).contains("failure"));assertEquals("/repos/owner/project/actions/runs/42",sent.get(1).getURL().getPath());
+        assertThrows(IllegalArgumentException.class,()->GitHubBuilds.repo("../escape"));
+    }
     @Test public void compatibleKeepsToolCallIdentityAndDoesNotPutKeyInBody()throws Exception{
         respond("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"device\",\"arguments\":\"{\\\"action\\\":\\\"read_screen\\\"}\"}}]}}]}");
         JSONObject answer=Models.complete(profile("compatible"),messages(),tools(),()->false);

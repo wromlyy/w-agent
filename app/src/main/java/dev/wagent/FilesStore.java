@@ -100,6 +100,13 @@ public final class FilesStore {
         }
         throw new IOException("Неизвестная операция с файлами");
     }
+    public JSONObject importOutput(String name,String mime,InputStream in,long limit,Net.Cancel cancel)throws Exception{
+        name=cleanPath(name);if(name.isEmpty()||name.contains("/"))throw new IOException("Недопустимое имя результата");String id=UUID.randomUUID().toString();File directory=new File(app.getFilesDir(),"output");if(!directory.isDirectory()&&!directory.mkdirs())throw new IOException("Не удалось создать папку результатов");File target=new File(directory,id);long total=0;
+        try(OutputStream out=new FileOutputStream(target)){byte[] b=new byte[32768];int n;while((n=in.read(b))!=-1){if(cancel.cancelled())throw new InterruptedException("Остановлено");total+=n;if(total>limit)throw new IOException("Файл превышает лимит загрузки");out.write(b,0,n);}}
+        catch(Exception e){target.delete();throw e;}
+        JSONObject file=new JSONObject().put("id",id).put("name",name).put("mime",mime).put("size",total).put("created",System.currentTimeMillis());
+        try{synchronized(app.vault){JSONObject state=app.vault.get();JSONArray outputs=state.optJSONArray("outputs");if(outputs==null)outputs=new JSONArray();outputs.put(file);app.vault.patch("outputs",outputs);}}catch(Exception e){target.delete();throw e;}return file;
+    }
     public JSONObject output(String name,String text)throws Exception{return outputBytes(name,mime(name),text.getBytes(StandardCharsets.UTF_8));}
     public JSONObject attach(String folder,String path)throws Exception{Uri uri=resolve(folder,path);JSONObject m=info(uri);return outputBytes(m.getString("name"),m.getString("mime"),read(uri,4*1024*1024));}
     private synchronized JSONObject outputBytes(String name,String mime,byte[] bytes)throws Exception{
