@@ -46,6 +46,8 @@ jobs:
           fi
       - name: Install SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Prepare embedded Linux
+        run: node tools/prepare-linux.cjs
       - name: Build installable APK
         run: sh gradlew assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest --stacktrace
       - name: Name APK
@@ -66,7 +68,7 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
   android14:
-    timeout-minutes: 12
+    timeout-minutes: 18
     needs: apk
     runs-on: ubuntu-latest
     steps:

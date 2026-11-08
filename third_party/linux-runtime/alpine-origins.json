@@ -1,0 +1,42 @@
+[
+  {
+    "origin": "alpine-baselayout",
+    "commit": "540d8477019887cc6534152e92c3b12676e35d7b"
+  },
+  {
+    "origin": "alpine-keys",
+    "commit": "6d473fb38effb2389f567b29fb7eb27039b3a279"
+  },
+  {
+    "origin": "alpine-base",
+    "commit": "dd94d896d312c363b34d0f13970fde25def57bb1"
+  },
+  {
+    "origin": "apk-tools",
+    "commit": "32e10bb0f3fd549bd1cfd9fa90d4761639a2e12e"
+  },
+  {
+    "origin": "busybox",
+    "commit": "2e97d754a30d558f15524b8e422303c8a96832df"
+  },
+  {
+    "origin": "ca-certificates",
+    "commit": "ce7bff87478cd936f5b7031ce822b02d4fdd313a"
+  },
+  {
+    "origin": "openssl",
+    "commit": "b6d0d5c5639c0034e9073c39e9ff139e28e71818"
+  },
+  {
+    "origin": "musl",
+    "commit": "ddaf59b84bc6983a37d6e24d2210c2c4791642bb"
+  },
+  {
+    "origin": "pax-utils",
+    "commit": "9818c555f344e3085d0dd1f3d917d8e23e244cb1"
+  },
+  {
+    "origin": "zlib",
+    "commit": "121fc97db0e7c59db704891b6d7ef83ae5df2cc2"
+  }
+]

@@ -13,3 +13,7 @@ tools/check/
 tools/classes/
 .private/
 node_modules/
+
+# Generated, checksum-pinned embedded Linux inputs
+app/src/main/jniLibs/
+app/src/main/assets/linux/

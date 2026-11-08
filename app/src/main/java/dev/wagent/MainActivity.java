@@ -105,12 +105,13 @@ public class MainActivity extends Activity {
                     }
                     case "checkpointRollback":if(!approve("Откатить файл?","Восстановить содержимое до выбранной правки?"))throw new IllegalStateException("Откат отклонён");result=new Project(app()).rollback(args.getString("id"));break;
                     case "memoryDelete":{synchronized(app().vault){JSONArray a=app().vault.get().optJSONArray("memories");if(a!=null)for(int n=0;n<a.length();n++)if(args.getString("id").equals(a.getJSONObject(n).optString("id"))){a.remove(n);break;}app().vault.patch("memories",a==null?new JSONArray():a);}result=true;break;}
+                    case "terminalStatus":result=new LinuxRuntime(app()).status();break;
                     case "terminalList":result=app().shell.list();break;
                     case "terminalKill":app().shell.kill(args.getString("id"));result=true;break;
                     case "terminalRun":{
                         String cmd=args.getString("cmd");if(ShellPolicy.blocked(cmd))throw new IllegalArgumentException("Команда запрещена политикой терминала");
                         if(!ShellPolicy.autoRead(cmd)&&!approve("Выполнить команду?",cmd+"\nРабочая папка: "+args.optString("cwd","workspace")))throw new IllegalStateException("Команда отклонена");
-                        result=app().shell.start(cmd,args.optString("cwd"),args.optInt("timeout",60));break;
+                        result=app().shell.start(cmd,args.optString("cwd"),args.optInt("timeout",60),args.optString("runtime","linux"));break;
                     }
                     case "run":app().agent.start(args.getString("task"),args.optJSONArray("files"));result=true;break;
                     case "planApprove":app().agent.approvePlan(args.getString("plan"));result=true;break;

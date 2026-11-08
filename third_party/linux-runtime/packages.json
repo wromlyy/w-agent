@@ -1,0 +1,48 @@
+{
+  "arm64-v8a": {
+    "packages": [
+      {
+        "name": "proot",
+        "url": "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.102_aarch64.deb",
+        "sha256": "10a394b585c2fc2b2c8502544f4e5f1be581dc8bfff79e8ba62f16207423e030"
+      },
+      {
+        "name": "libtalloc",
+        "url": "https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/libtalloc_2.5.0_aarch64.deb",
+        "sha256": "556591f43bb773ad8777e1a29522640866a55f95dab71914418b94a8c58ad5a7"
+      },
+      {
+        "name": "libandroid-shmem",
+        "url": "https://packages.termux.dev/apt/termux-main/pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_aarch64.deb",
+        "sha256": "0da3a24d558b93c92bcf8d611e0826a99ff96e396b148e6cdf33b47c47c57ff6"
+      }
+    ],
+    "rootfs": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/aarch64/alpine-minirootfs-3.22.8-aarch64.tar.gz",
+      "sha256": "36091efacd083c1cf5a8c837272530bff4fc72db1fbfdef559f52de0d890bca4"
+    }
+  },
+  "x86_64": {
+    "packages": [
+      {
+        "name": "proot",
+        "url": "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.102_x86_64.deb",
+        "sha256": "2497064226c15971be8131c7facead94a06c225347796326a383c832dca57758"
+      },
+      {
+        "name": "libtalloc",
+        "url": "https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/libtalloc_2.5.0_x86_64.deb",
+        "sha256": "b8c6d95f20075dc1f9ec6573575b2444e8d526e48e0d8d6d5cf4e071e6e06530"
+      },
+      {
+        "name": "libandroid-shmem",
+        "url": "https://packages.termux.dev/apt/termux-main/pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_x86_64.deb",
+        "sha256": "ffa9e4c87467b158b148d0ff92dda796aa038276c2075af3269cdcdb06f25797"
+      }
+    ],
+    "rootfs": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/x86_64/alpine-minirootfs-3.22.8-x86_64.tar.gz",
+      "sha256": "2d7f46af9b7e86ad64ebeba3fe9b75b62dd5b259e708afb2ab21268f627696e5"
+    }
+  }
+}
