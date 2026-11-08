@@ -5,7 +5,7 @@ import java.util.*;
 public final class Roles {
     public static JSONArray presets()throws Exception{
         JSONArray all=new JSONArray();String[][] rows={
-            {"code","Code-агент","Читай README и AGENTS.md. Составь план, вноси небольшие diff. После правок запускай тесты и сборку через GitHub Actions; получай реальный артефакт. В итоговом отчёте отделяй выполненное, проверенное и ограничения.","project,files,shell_exec,service,github_actions,memory","high"},
+            {"code","Code-агент","Читай README и AGENTS.md. Составь план, вноси небольшие diff. После правок запускай тесты и сборку через GitHub Actions; получай реальный артефакт. В итоговом отчёте отделяй выполненное, проверенное и ограничения.","project,files,shell_exec,service,github_actions,memory,browser","high"},
             {"python","Python-разработчик","Пиши понятный Python. Проверь зависимости и среду, запускай тесты и проверку синтаксиса. Для отсутствующего Python используй workflow репозитория, не выдумывай результат.","project,files,shell_exec,service,github_actions,memory","high"},
             {"frontend","Frontend","Изучи существующие компоненты и стили, соблюдай дизайн. Используй небольшие правки. Проверь адаптивность и тесты через workflow.","project,files,shell_exec,service,github_actions,memory","high"},
             {"debugger","Debugger","Сначала воспроизведение и факты из логов, затем причина, минимальная правка и проверка. Не исправляй предположения без доказательств.","project,files,shell_exec,service,github_actions,device,memory","high"},
@@ -21,7 +21,7 @@ public final class Roles {
         JSONArray roles=settings.optJSONArray("roles");if(roles==null||roles.length()==0)roles=presets();String id=settings.optString("activeRole","general");for(int i=0;i<roles.length();i++)if(id.equals(roles.getJSONObject(i).optString("id")))return roles.getJSONObject(i);throw new IllegalArgumentException("Выбранная роль не найдена");
     }
     public static void validate(JSONArray roles)throws Exception{
-        if(roles==null||roles.length()>40)throw new IllegalArgumentException("Ролей должно быть не более 40");Set<String> ids=new HashSet<>();for(int i=0;i<roles.length();i++){JSONObject role=roles.getJSONObject(i);if(role.getString("id").trim().isEmpty()||!ids.add(role.getString("id")))throw new IllegalArgumentException("ID роли пустой или повторяется");role.getString("name");if(role.getString("prompt").length()>20000)throw new IllegalArgumentException("Промпт роли слишком большой");JSONArray tools=role.getJSONArray("tools");for(int j=0;j<tools.length();j++)if(!Arrays.asList("device","project","files","shell_exec","service","github_actions","memory","web").contains(tools.getString(j)))throw new IllegalArgumentException("Неизвестный инструмент роли");if(!Arrays.asList("ask_all","read_auto","sandbox").contains(role.optString("trust","read_auto")))throw new IllegalArgumentException("Неизвестный режим доверия");Models.effort(role);}
+        if(roles==null||roles.length()>40)throw new IllegalArgumentException("Ролей должно быть не более 40");Set<String> ids=new HashSet<>();for(int i=0;i<roles.length();i++){JSONObject role=roles.getJSONObject(i);if(role.getString("id").trim().isEmpty()||!ids.add(role.getString("id")))throw new IllegalArgumentException("ID роли пустой или повторяется");role.getString("name");if(role.getString("prompt").length()>20000)throw new IllegalArgumentException("Промпт роли слишком большой");JSONArray tools=role.getJSONArray("tools");for(int j=0;j<tools.length();j++)if(!Arrays.asList("device","project","files","shell_exec","service","github_actions","memory","web","browser").contains(tools.getString(j)))throw new IllegalArgumentException("Неизвестный инструмент роли");if(!Arrays.asList("ask_all","read_auto","sandbox").contains(role.optString("trust","read_auto")))throw new IllegalArgumentException("Неизвестный режим доверия");Models.effort(role);}
     }
     public static boolean readOnlyCall(String name,JSONObject a){
         String action=a.optString("action");switch(name){
@@ -32,13 +32,15 @@ public final class Roles {
             case "github_actions":return Arrays.asList("workflows","runs","run","jobs","artifacts").contains(action);
             case "memory":return "list".equals(action);
             case "service":return (!a.has("operation")&&"GET".equalsIgnoreCase(a.optString("method","GET")))||Arrays.asList("tools/list","resources/list","resources/read","prompts/list","prompts/get").contains(a.optString("operation"));
+            case "browser":return Arrays.asList("open","preview","snapshot","wait","assert","console","screenshot","close").contains(action);
             case "web":return true;
             default:return false;
         }
     }
     public static boolean permits(JSONObject role,String name,JSONObject args)throws Exception{
         JSONArray tools=role.getJSONArray("tools");boolean found=false;for(int i=0;i<tools.length();i++)if(name.equals(tools.getString(i)))found=true;
+        if("browser".equals(name)){for(int i=0;i<tools.length();i++)if("web".equals(tools.getString(i))||"project".equals(tools.getString(i)))found=true;}
         return found&&(!role.optBoolean("readOnly")||readOnlyCall(name,args));
     }
-    public static JSONArray filter(JSONObject role,JSONArray definitions)throws Exception{JSONArray out=new JSONArray();JSONArray names=role.getJSONArray("tools");for(int i=0;i<definitions.length();i++){JSONObject d=definitions.getJSONObject(i);String name=d.getJSONObject("function").getString("name");for(int j=0;j<names.length();j++)if(name.equals(names.getString(j)))out.put(d);}return out;}
+    public static JSONArray filter(JSONObject role,JSONArray definitions)throws Exception{JSONArray out=new JSONArray();JSONArray names=role.getJSONArray("tools");for(int i=0;i<definitions.length();i++){JSONObject d=definitions.getJSONObject(i);String name=d.getJSONObject("function").getString("name");boolean include=false;for(int j=0;j<names.length();j++)if(name.equals(names.getString(j))||("browser".equals(name)&&Arrays.asList("web","project").contains(names.getString(j))))include=true;if(include)out.put(d);}return out;}
 }

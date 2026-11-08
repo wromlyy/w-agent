@@ -42,7 +42,7 @@ public final class Project {
         if("grep".equals(op)){String query=a.getString("query");if(query.isEmpty())throw new IOException("Нужен текст поиска");JSONArray hits=new JSONArray();grep(folder,path,query,hits,0,new int[]{0});return new JSONObject().put("matches",hits).put("notice","Поиск ограничен 200 файлами, глубиной 8 и 100 совпадениями").toString();}
         if("write_file".equals(op)||"edit_file".equals(op)){
             JSONObject change=prepare(folder,path,a.optString("content"),"edit_file".equals(op)?a.getString("diff"):null);DeviceService d=DeviceService.live;
-            boolean yes=d!=null?d.approve("Применить diff: "+path,change.getString("preview")):MainActivity.approve("Применить diff: "+path,change.getString("preview"));if(!yes)return "Изменение отклонено. Не повторять.";return apply(change).toString();
+            boolean automatic=LocalTrust.files(app.vault.get(),folder,app.workspace());if(automatic)app.agent.outputEvent(new FilesStore(app).output("change.diff",change.getString("preview")));boolean yes=automatic||(d!=null?d.approve("Применить diff: "+path,change.getString("preview")):MainActivity.approve("Применить diff: "+path,change.getString("preview")));if(!yes)return "Изменение отклонено. Не повторять.";return apply(change).toString();
         }
         throw new IOException("Неизвестный инструмент проекта");
     }
