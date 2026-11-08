@@ -54,6 +54,7 @@ public final class Vault {
         for (String k : new String[]{"profiles", "services", "skills", "activeProfile", "vision", "theme", "maxSteps", "maxSeconds", "maxTokens", "doubleCheck", "teamMode", "agentMode"}) if (settings.has(k)) next.put(k, settings.get(k));
         save(next);
     }
+    public synchronized void patch(String key,Object value)throws Exception{save(get().put(key,value));}
     public synchronized void history(JSONObject entry) throws Exception {
         JSONObject next=get(); JSONArray history=next.getJSONArray("history"); history.put(entry);
         while(history.length()>60) history.remove(0);

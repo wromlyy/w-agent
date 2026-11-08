@@ -84,6 +84,13 @@ public class MainActivity extends Activity {
                         JSONObject screen=new JSONObject(service.screen());result=new JSONObject().put("connected",true).put("elements",screen.getJSONArray("elements").length()).put("screenAvailable",screen.has("package"));break;
                     }
                     case "save":app().vault.updateSettings(args);applyTheme();result=true;break;
+                    case "terminalList":result=app().shell.list();break;
+                    case "terminalKill":app().shell.kill(args.getString("id"));result=true;break;
+                    case "terminalRun":{
+                        String cmd=args.getString("cmd");if(ShellPolicy.blocked(cmd))throw new IllegalArgumentException("Команда запрещена политикой терминала");
+                        if(!ShellPolicy.autoRead(cmd)&&!approve("Выполнить команду?",cmd+"\nРабочая папка: "+args.optString("cwd","workspace")))throw new IllegalStateException("Команда отклонена");
+                        result=app().shell.start(cmd,args.optString("cwd"),args.optInt("timeout",60));break;
+                    }
                     case "run":app().agent.start(args.getString("task"),args.optJSONArray("files"));result=true;break;
                     case "planApprove":app().agent.approvePlan(args.getString("plan"));result=true;break;
                     case "pause":app().agent.pause(args.optBoolean("paused",true));result=true;break;
