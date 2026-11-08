@@ -84,6 +84,7 @@ public class MainActivity extends Activity {
                         JSONObject screen=new JSONObject(service.screen());result=new JSONObject().put("connected",true).put("elements",screen.getJSONArray("elements").length()).put("screenAvailable",screen.has("package"));break;
                     }
                     case "save":app().vault.updateSettings(args);applyTheme();result=true;break;
+                    case "compactContext":result=app().agent.compact();break;
                     case "projectRead":result=new Project(app()).execute(args.put("action","read_file"));break;
                     case "projectWrite":{
                         Project project=new Project(app());JSONObject change=project.prepare(args.getString("folder"),args.getString("path"),args.getString("content"),null);

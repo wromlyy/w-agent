@@ -172,13 +172,15 @@ public final class Models {
             else{if("off".equals(mode))throw new IllegalArgumentException("У этой версии Gemini нельзя отключить рассуждения этим параметром. Выберите Авто или Low.");thinking.put("thinkingLevel","auto".equals(effort)?"medium":effort);}
             req.put("generationConfig",new JSONObject().put("thinkingConfig",thinking));
         }
+        if(profile.has("outputLimit")){JSONObject config=req.optJSONObject("generationConfig");if(config==null)config=new JSONObject();config.put("maxOutputTokens",profile.getInt("outputLimit"));req.put("generationConfig",config);}
         Map<String,String> h=new HashMap<>();h.put("x-goog-api-key",key);
         String name=URLEncoder.encode(model,"UTF-8").replace("+","%20");
         JSONObject r=Net.request("POST",Net.join(base,"models/"+name+":generateContent"),h,req.toString(),cancel).json();
         JSONArray candidates=r.optJSONArray("candidates");if(candidates==null||candidates.length()==0)throw new IllegalStateException("Gemini не вернул ответ. Проверьте модель и ограничения аккаунта.");
         JSONArray parts=candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts"),calls=new JSONArray();StringBuilder text=new StringBuilder();
         for(int i=0;i<parts.length();i++){JSONObject part=parts.getJSONObject(i);if(part.has("text")&&!part.optBoolean("thought"))text.append(part.getString("text"));JSONObject f=part.optJSONObject("functionCall");if(f!=null){JSONObject c=call("call_"+UUID.randomUUID().toString().replace("-",""),f.getString("name"),f.optJSONObject("args")==null?new JSONObject():f.getJSONObject("args"));if(part.has("thoughtSignature"))c.put("thoughtSignature",part.getString("thoughtSignature"));calls.put(c);}}
-        return new JSONObject().put("role","assistant").put("content",text.toString()).put("tool_calls",calls);
+        JSONObject u=r.optJSONObject("usageMetadata"),usage=null;if(u!=null)usage=new JSONObject().put("input_tokens",u.optInt("promptTokenCount")).put("output_tokens",u.optInt("candidatesTokenCount")+u.optInt("thoughtsTokenCount")).put("total_tokens",u.optInt("totalTokenCount"));
+        return new JSONObject().put("role","assistant").put("content",text.toString()).put("tool_calls",calls).put("_usage",usage);
     }
     private static JSONObject call(String id,String name,JSONObject args) throws Exception {return new JSONObject().put("id",id).put("type","function").put("function",new JSONObject().put("name",name).put("arguments",args.toString()));}
 }
