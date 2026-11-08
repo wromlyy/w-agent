@@ -180,15 +180,8 @@ public class MainActivity extends Activity {
             List<Uri> uris=new ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<Math.min(6,data.getClipData().getItemCount());i++)uris.add(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());
             JSONArray files=new JSONArray();int total=0;
             for(Uri uri:uris){String name="file";try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())name=c.getString(0);}
-                byte[] bytes;try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException("Не удалось прочитать файл");ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] chunk=new byte[8192];int n;while((n=in.read(chunk))!=-1){if(out.size()+n>4*1024*1024)throw new IOException("Максимум 4 МБ на файл");out.write(chunk,0,n);}bytes=out.toByteArray();}
-                total+=bytes.length;if(total>10*1024*1024)throw new IOException("Общий размер файлов не должен превышать 10 МБ");
-                String mime=getContentResolver().getType(uri);if(mime==null)mime="application/octet-stream";
-                JSONObject file=new JSONObject().put("id",UUID.randomUUID().toString()).put("name",name).put("mime",mime).put("size",bytes.length);
-                if("skill".equals(mode)||mime.startsWith("text/")||mime.equals("application/json")||name.matches("(?i).+\\.(md|txt|json|csv|js|ts|java|py|xml|html|css|yaml|yml|log|sh)$")){
-                    if(bytes.length>200000)throw new IOException("Текстовый файл: максимум 200 КБ");file.put("text",new String(bytes,StandardCharsets.UTF_8));
-                }else if(mime.startsWith("image/")||mime.equals("application/pdf"))file.put("data",android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP));
-                else throw new IOException("Поддерживаются текстовые файлы, код, изображения и PDF");
-                files.put(file);
+                byte[] bytes;try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException("Не удалось прочитать файл");ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] chunk=new byte[8192];int n;while((n=in.read(chunk))!=-1){if(out.size()+n>20*1024*1024)throw new IOException("Исходный файл: максимум 20 МБ; фото уменьшаются автоматически");out.write(chunk,0,n);}bytes=out.toByteArray();}
+                String mime=getContentResolver().getType(uri);JSONObject file=Attachments.create(name,mime,bytes,"skill".equals(mode));total+=file.getInt("size");if(total>10*1024*1024)throw new IOException("Общий размер подготовленных вложений больше 10 МБ");files.put(file);
             }reply(id,files,null);
         }catch(Exception e){reply(id,null,e.getMessage());}});
     }

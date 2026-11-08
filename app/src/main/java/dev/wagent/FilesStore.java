@@ -62,11 +62,8 @@ public final class FilesStore {
         try(InputStream in=resolver().openInputStream(uri)){if(in==null)throw new IOException("Не удалось открыть файл");ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1){if(out.size()+n>limit)throw new IOException("Размер файла превышает "+limit/1024+" КБ");out.write(buf,0,n);}return out.toByteArray();}
     }
     public JSONObject attachment(String folder,String path)throws Exception{
-        Uri uri=resolve(folder,path);JSONObject meta=info(uri);byte[] bytes=read(uri,4*1024*1024);String mime=meta.getString("mime"),name=meta.getString("name");
-        JSONObject file=new JSONObject().put("id",UUID.randomUUID().toString()).put("name",name).put("mime",mime).put("size",bytes.length);
-        if(isText(mime,name)){if(bytes.length>200000)throw new IOException("Текстовое вложение: максимум 200 КБ");file.put("text",new String(bytes,StandardCharsets.UTF_8));}
-        else if(mime.startsWith("image/")||mime.equals("application/pdf"))file.put("data",android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP));
-        else throw new IOException("Для чата поддерживаются текст, изображения и PDF");return file;
+        Uri uri=resolve(folder,path);JSONObject meta=info(uri);byte[] bytes=read(uri,20*1024*1024);String mime=meta.getString("mime"),name=meta.getString("name");
+        return Attachments.create(name,mime,bytes,false);
     }
     private static boolean isText(String mime,String name){return mime.startsWith("text/")||mime.equals("application/json")||name.matches("(?i).+\\.(md|txt|json|csv|js|ts|java|py|xml|html|css|yaml|yml|log|sh)$");}
     public static String mime(String name){String n=name.toLowerCase(Locale.ROOT);if(n.endsWith(".md"))return "text/markdown";if(n.endsWith(".csv"))return "text/csv";if(n.endsWith(".json"))return "application/json";if(n.endsWith(".html"))return "text/html";return "text/plain";}
