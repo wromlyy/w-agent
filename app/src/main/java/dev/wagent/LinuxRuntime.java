@@ -35,7 +35,7 @@ public final class LinuxRuntime {
         String abi=abi();if(!nativeFile("libwproot.so").isFile())throw new IOException("В этой сборке нет встроенного Linux. Нужен APK с runtime для "+abi);
         if(!base().isDirectory()&&!base().mkdirs())throw new IOException("Не удалось создать окружение");
         File archive=new File(base(),"rootfs.tar.gz");MessageDigest digest=MessageDigest.getInstance("SHA-256");
-        try(InputStream in=app.getAssets().open("linux/"+abi+".tar.gz");FileOutputStream out=new FileOutputStream(archive)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){digest.update(b,0,n);out.write(b,0,n);}}
+        try(InputStream in=app.getAssets().open("linux/"+abi+".rootfs");FileOutputStream out=new FileOutputStream(archive)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1){digest.update(b,0,n);out.write(b,0,n);}}
         JSONObject meta;try(InputStream in=app.getAssets().open("linux/"+abi+".json")){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[1024];int n;while((n=in.read(b))!=-1)out.write(b,0,n);meta=new JSONObject(out.toString("UTF-8"));}
         StringBuilder actual=new StringBuilder();for(byte b:digest.digest())actual.append(String.format(Locale.ROOT,"%02x",b&255));if(!actual.toString().equals(meta.getString("sha256")))throw new IOException("Контрольная сумма Linux не совпала");
         File staging=new File(base(),"installing");remove(staging);if(!staging.mkdirs())throw new IOException("Не удалось распаковать Linux");
