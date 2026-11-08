@@ -23,6 +23,7 @@ public class MainActivity extends Activity {
     private static volatile CompletableFuture<Boolean> approval;
     private WebView web;
     private Voice voice;
+    private Intent sharedIntent;
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final Handler handler=new Handler(Looper.getMainLooper());
     private String pickerId,pickerMode;
@@ -30,7 +31,7 @@ public class MainActivity extends Activity {
     private String saveOutputId;
     private WApp app(){return (WApp)getApplication();}
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);voice=new Voice(this);
+        super.onCreate(saved);sharedIntent=getIntent();voice=new Voice(this);
         web=new WebView(this);web.setBackgroundColor(Color.rgb(245,244,240));setContentView(web);
         applyTheme();
         if(Build.VERSION.SDK_INT>=35){getWindow().setDecorFitsSystemWindows(false);web.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});}
@@ -49,6 +50,13 @@ public class MainActivity extends Activity {
             private WebResourceResponse empty(){return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));}
         });
         web.addJavascriptInterface(new Bridge(),"WNative");web.loadUrl("https://app.wagent.local/index.html");
+    }
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);sharedIntent=intent;if(web!=null)web.evaluateJavascript("window.receiveShared && window.receiveShared()",null);}
+    private JSONObject shared()throws Exception{
+        Intent intent=sharedIntent;sharedIntent=null;JSONObject result=new JSONObject().put("files",new JSONArray()).put("text","");if(intent==null||!Intent.ACTION_SEND.equals(intent.getAction()))return result;
+        CharSequence text=intent.getCharSequenceExtra(Intent.EXTRA_TEXT);if(text!=null)result.put("text",text.toString().substring(0,Math.min(20000,text.length())));
+        Uri uri=intent.getParcelableExtra(Intent.EXTRA_STREAM);if(uri!=null){if(!"content".equals(uri.getScheme()))throw new IOException("Вложения должны передаваться через content URI Android");String name="shared-file";try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())name=c.getString(0);}try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException("Нет доступа к отправленному файлу");ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(out.size()+n>20*1024*1024)throw new IOException("Отправленный файл больше 20 МБ");out.write(b,0,n);}result.getJSONArray("files").put(Attachments.create(name,getContentResolver().getType(uri),out.toByteArray(),false));}}
+        return result;
     }
     @Override protected void onResume(){super.onResume();foreground=new java.lang.ref.WeakReference<>(this);if(web!=null)web.onResume();}
     private void applyTheme(){runOnUiThread(()->{
@@ -77,6 +85,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void post(String raw){
             io.execute(()->{String id="";try{JSONObject req=new JSONObject(raw);id=req.getString("id");String op=req.getString("op");JSONObject args=req.optJSONObject("args");if(args==null)args=new JSONObject();Object result=null;
                 switch(op){
+                    case "shared":result=shared();break;
                     case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");if(Build.VERSION.SDK_INT>=31)visible.put("systemAccent",String.format("#%06X",getColor(android.R.color.system_accent1_600)&0xffffff));if(!visible.has("roles"))visible.put("roles",Roles.presets());result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("device",DeviceStatus.get(MainActivity.this)).put("run",app().agent.state()).put("version","0.2.0");break;}
                     case "state":result=new JSONObject().put("run",app().agent.state()).put("device",DeviceStatus.get(MainActivity.this)).put("accessibility",DeviceService.live!=null);break;
                     case "reconnect":handler.post(()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));result=true;break;
