@@ -105,6 +105,11 @@ public class MainActivity extends Activity {
                     }
                     case "checkpointRollback":if(!approve("Откатить файл?","Восстановить содержимое до выбранной правки?"))throw new IllegalStateException("Откат отклонён");result=new Project(app()).rollback(args.getString("id"));break;
                     case "memoryDelete":{synchronized(app().vault){JSONArray a=app().vault.get().optJSONArray("memories");if(a!=null)for(int n=0;n<a.length();n++)if(args.getString("id").equals(a.getJSONObject(n).optString("id"))){a.remove(n);break;}app().vault.patch("memories",a==null?new JSONArray():a);}result=true;break;}
+                    case "ptyOpen":if(!approve("Открыть интерактивный Linux-терминал?","Введённые вами команды выполняются сразу с правами W Agent, без отдельных подтверждений. Модель не имеет доступа к этому вводу."))throw new IOException("Терминал не открыт");result=app().terminal().open(args.optInt("cols",80),args.optInt("rows",24));break;
+                    case "ptyPoll":result=app().terminal().state(args.optLong("cursor",0));break;
+                    case "ptyInput":app().terminal().input(args.getString("text"));result=true;break;
+                    case "ptyResize":app().terminal().resize(args.optInt("cols",80),args.optInt("rows",24));result=true;break;
+                    case "ptyStop":if(app().pty!=null)app().pty.stop();result=true;break;
                     case "terminalStatus":result=new LinuxRuntime(app()).status();break;
                     case "terminalList":result=app().shell.list();break;
                     case "terminalKill":app().shell.kill(args.getString("id"));result=true;break;
