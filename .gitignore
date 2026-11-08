@@ -17,3 +17,4 @@ node_modules/
 # Generated, checksum-pinned embedded Linux inputs
 app/src/main/jniLibs/
 app/src/main/assets/linux/
+W-Agent-Linux-Sources.tar.gz

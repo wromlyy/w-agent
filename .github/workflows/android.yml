@@ -8,6 +8,19 @@ on:
 permissions:
   contents: read
 jobs:
+  linux-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Collect corresponding Linux sources and build recipes
+        run: node tools/prepare-linux-sources.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: W-Agent-Linux-Sources
+          path: W-Agent-Linux-Sources.tar.gz
   apk:
     runs-on: ubuntu-latest
     steps:
