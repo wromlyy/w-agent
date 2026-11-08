@@ -19,6 +19,8 @@ public class DeviceService extends AccessibilityService {
     private final Map<Integer,AccessibilityNodeInfo> nodes=new HashMap<>();
     private WindowManager wm;
     private View overlay;
+    private TextView statusLabel;
+    private android.animation.ObjectAnimator pulse;
     private CompletableFuture<Boolean> pendingApproval;
     private int counter;
     @Override public void onServiceConnected(){
@@ -145,16 +147,20 @@ public class DeviceService extends AccessibilityService {
         finally{pendingApproval=null;main.post(()->{removeOverlay();if(((WApp)getApplication()).agent.running())showStop();});}
     }
     public void cancelApproval(){CompletableFuture<Boolean> p=pendingApproval;if(p!=null)p.complete(false);}
-    public void showStop(){main.post(()->{try{if(live==this)showOverlay(false,"W  ·  Остановить",null,null);}catch(RuntimeException e){DeviceStatus.record(this,"overlay-error",e);removeOverlay();}});}
+    public void showStop(){main.post(()->{try{if(live==this)showOverlay(false,"W Agent · Выполняю задачу",null,null);}catch(RuntimeException e){DeviceStatus.record(this,"overlay-error",e);removeOverlay();}});}
+    public void updateStatus(String text){main.post(()->{if(statusLabel!=null)statusLabel.setText("W Agent · "+clip(text,90));});}
     public void hideStop(){main.post(this::removeOverlay);}
     private void showOverlay(boolean approval,String title,String detail,CompletableFuture<Boolean> answer){
         removeOverlay();LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(28,20,28,20);
-        android.graphics.drawable.GradientDrawable bg=new android.graphics.drawable.GradientDrawable();bg.setColor(Color.rgb(38,61,48));bg.setCornerRadius(28);box.setBackground(bg);box.setElevation(12);
+        android.graphics.drawable.GradientDrawable bg=new android.graphics.drawable.GradientDrawable();bg.setColor(Color.rgb(43,66,175));bg.setCornerRadius(28);box.setBackground(bg);box.setElevation(12);
         TextView label=new TextView(this);label.setText(title);label.setTextColor(Color.WHITE);label.setTextSize(14);box.addView(label);
         if(approval){TextView info=new TextView(this);info.setText(detail);info.setTextColor(Color.rgb(220,225,219));ScrollView scroll=new ScrollView(this);scroll.addView(info);box.addView(scroll,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,Math.min(getResources().getDisplayMetrics().heightPixels/2,Math.max(100,detail.length()*2))));LinearLayout buttons=new LinearLayout(this);
             Button no=new Button(this);no.setText("Отклонить");no.setOnClickListener(v->answer.complete(false));buttons.addView(no);
             Button yes=new Button(this);yes.setText("Разрешить");yes.setOnClickListener(v->answer.complete(true));buttons.addView(yes);box.addView(buttons);
-        }else box.setOnClickListener(v->((WApp)getApplication()).agent.stop());
+        }else{
+            statusLabel=label;label.setMaxLines(2);label.setMaxWidth(Math.min(600,getResources().getDisplayMetrics().widthPixels-100));pulse=android.animation.ObjectAnimator.ofFloat(label,"alpha",.5f,1f);pulse.setDuration(1000);pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);pulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);pulse.start();
+            LinearLayout controls=new LinearLayout(this);Button pause=new Button(this);pause.setText(((WApp)getApplication()).agent.paused()?"Продолжить":"Пауза");pause.setOnClickListener(v->{Agent agent=((WApp)getApplication()).agent;agent.pause(!agent.paused());pause.setText(agent.paused()?"Продолжить":"Пауза");});controls.addView(pause);Button stop=new Button(this);stop.setText("Стоп");stop.setOnClickListener(v->((WApp)getApplication()).agent.stop());controls.addView(stop);box.addView(controls);
+        }
         WindowManager.LayoutParams lp=new WindowManager.LayoutParams(approval?Math.min(getResources().getDisplayMetrics().widthPixels-40,900):WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT);
         lp.gravity=Gravity.TOP|Gravity.START;lp.x=16;lp.y=approval?80:getResources().getDisplayMetrics().heightPixels/2;
         if(!approval)box.setOnTouchListener(new View.OnTouchListener(){
@@ -167,5 +173,5 @@ public class DeviceService extends AccessibilityService {
         });
         wm.addView(box,lp);overlay=box;
     }
-    private void removeOverlay(){if(overlay!=null&&wm!=null){try{wm.removeView(overlay);}catch(Exception ignored){}overlay=null;}}
+    private void removeOverlay(){statusLabel=null;if(pulse!=null){pulse.cancel();pulse=null;}if(overlay!=null&&wm!=null){try{wm.removeView(overlay);}catch(Exception ignored){}overlay=null;}}
 }

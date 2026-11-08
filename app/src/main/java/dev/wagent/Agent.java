@@ -18,6 +18,7 @@ public final class Agent implements Net.Cancel {
     private volatile CompletableFuture<String> planApproval;
     public Agent(WApp app){this.app=app;try{JSONObject state=app.vault.get();chatId=state.optString("currentChat",UUID.randomUUID().toString());app.vault.save(state.put("currentChat",chatId));restoreConversation();}catch(Exception e){chatId=UUID.randomUUID().toString();}}
     public boolean running(){return running;}
+    public boolean paused(){return paused;}
     public synchronized void newChat()throws Exception{if(running)throw new IllegalStateException("Сначала остановите задачу");chatId=UUID.randomUUID().toString();app.vault.save(app.vault.get().put("currentChat",chatId));while(conversation.length()>0)conversation.remove(0);run=new JSONObject();}
     public synchronized void selectChat(String id)throws Exception{
         if(running)throw new IllegalStateException("Сначала остановите задачу");JSONArray history=app.vault.get().getJSONArray("history");boolean found=false;
@@ -58,10 +59,10 @@ public final class Agent implements Net.Cancel {
             .put(new JSONObject().put("role","user").put("content",prompt));
         String result=model(profile,messages,new JSONArray()).optString("content");if(result.trim().isEmpty())throw new IllegalStateException(role+": модель не вернула текст");event(role.startsWith("Reviewer")?"review":"plan",result);return result;
     }
-    public void pause(boolean value){paused=value;}
+    public void pause(boolean value){paused=value;if(DeviceService.live!=null)DeviceService.live.updateStatus(value?"Пауза":"Продолжаю задачу");}
     public void stop(){cancel=true;paused=false;DeviceService s=DeviceService.live;if(s!=null)s.cancelApproval();MainActivity.cancelApproval();}
     private synchronized void event(String kind,String text) {
-        try{run.getJSONArray("events").put(new JSONObject().put("kind",kind).put("text",redact(text)).put("time",System.currentTimeMillis()));}catch(Exception ignored){}
+        try{if(DeviceService.live!=null&&Arrays.asList("status","action").contains(kind))DeviceService.live.updateStatus(text.split("\n")[0]);run.getJSONArray("events").put(new JSONObject().put("kind",kind).put("text",redact(text)).put("time",System.currentTimeMillis()));}catch(Exception ignored){}
     }
     private String redact(String text){
         JSONObject s=app.vault.get();for(String group:new String[]{"profiles","services"}){JSONArray items=s.optJSONArray(group);if(items!=null)for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item!=null)for(String k:new String[]{"key","token"}){String secret=item.optString(k);if(!secret.trim().isEmpty())text=text.replace(secret,"[скрыто]");}}}return text;
