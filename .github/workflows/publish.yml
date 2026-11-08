@@ -11,6 +11,11 @@ on:
         required: true
         type: string
         default: v0.3.1
+      preliminary:
+        description: Publish a prerelease with an explicitly documented incomplete device check
+        required: false
+        type: boolean
+        default: false
 permissions:
   actions: read
   contents: write
@@ -23,6 +28,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       BUILD_RUN: ${{ inputs.build_run }}
       RELEASE_TAG: ${{ inputs.version }}
+      PRELIMINARY: ${{ inputs.preliminary }}
     steps:
       - uses: actions/checkout@v4
       - name: Require successful main-branch build and device checks
@@ -32,7 +38,14 @@ jobs:
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
-          jq -e '.status == "completed" and .conclusion == "success" and .head_branch == "main" and .event == "push" and .name == "Build APK"' run.json
+          jq -e '.status == "completed" and .head_branch == "main" and .event == "push" and .name == "Build APK"' run.json
+          if [[ "$PRELIMINARY" == "true" ]]; then
+            gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN/jobs?filter=latest&per_page=100" > jobs.json
+            jq -e '[.jobs[] | select(.name == "apk" or .name == "linux-sources")] | length == 2 and all(.conclusion == "success")' jobs.json
+            grep -F 'Итоговый прогон Android 14 не завершён успешно' .github/release-v031.md
+          else
+            jq -e '.conclusion == "success"' run.json
+          fi
           build_sha=$(jq -r .head_sha run.json)
           [[ "$build_sha" =~ ^[0-9a-f]{40}$ ]]
           echo "sha=$build_sha" >> "$GITHUB_OUTPUT"
@@ -52,5 +65,11 @@ jobs:
         shell: bash
         run: |
           sed "s/{{BUILD_RUN}}/$BUILD_RUN/g" .github/release-v031.md > release-notes.md
-          gh release create "$RELEASE_TAG" release-assets/W-Agent.apk release-assets/W-Agent.apk.sha256 release-assets/W-Agent-Linux-Sources.tar.gz --target "$BUILD_SHA" --title "W Agent ${RELEASE_TAG#v}" --draft --prerelease --notes-file release-notes.md
+          if gh release view "$RELEASE_TAG" --json isDraft,targetCommitish > existing.json; then
+            jq -e --arg sha "$BUILD_SHA" '.isDraft == true and .targetCommitish == $sha' existing.json
+            gh release upload "$RELEASE_TAG" release-assets/W-Agent.apk release-assets/W-Agent.apk.sha256 release-assets/W-Agent-Linux-Sources.tar.gz --clobber
+            gh release edit "$RELEASE_TAG" --title "W Agent ${RELEASE_TAG#v}" --notes-file release-notes.md
+          else
+            gh release create "$RELEASE_TAG" release-assets/W-Agent.apk release-assets/W-Agent.apk.sha256 release-assets/W-Agent-Linux-Sources.tar.gz --target "$BUILD_SHA" --title "W Agent ${RELEASE_TAG#v}" --draft --prerelease --notes-file release-notes.md
+          fi
           gh release edit "$RELEASE_TAG" --draft=false --prerelease
