@@ -11,10 +11,10 @@ W Agent 0.3.1 — интерфейс 0.2 с кастомизацией и раб
 
 **Скачать:** W-Agent.apk. ARM64 (включая POCO F4) / x86_64, Android 9+. Подписано тем же сохранённым ключом, что опубликованная 0.3.0. При несовместимости подписи старой 0.2 сначала сохраните данные и API-ключи.
 
-**Проверки:** debug/release сборки и lint, UI/logic тесты, Chrome-превью, Android 14 с Linux/Python/Node/Git/SSH/C/PTY и фоновым JS-браузером при другом приложении на переднем плане. Речь через физический микрофон и ограничения HyperOS требуют проверки на телефоне.
+**Проверки:** debug/release сборки и lint, UI/logic тесты и Chrome-превью прошли. Итоговый прогон Android 14 не завершён успешно: эмулятор отключается от ADB без итогового отчёта. Предыдущий прогон [42516954953](https://github.com/wromlyy/w-agent/actions/runs/42516954953) прошёл Linux/Python/Node/Git/SSH/C/PTY и фоновый JS-браузер, но это не подтверждает последнюю сборку целиком. Этот APK опубликован как предварительный для испытания на устройстве; речь через физический микрофон, графика и HyperOS требуют проверки на телефоне.
 
 Фоновая работа зависит от интернета, квот модели, времени задачи и сохранения процесса Android. Вход на сайт ChatGPT/Gemini/Grok не подключает API — нужен ключ, Relay или поддерживаемый OpenRouter PKCE. Все файлы устройства без root недоступны: доступны /workspace и выбранные Android-папки.
 
-[README](https://github.com/wromlyy/w-agent/blob/v0.3.1/README.md) · [Проверка сборки](https://github.com/wromlyy/w-agent/actions/runs/{{BUILD_RUN}})
+[README](https://github.com/wromlyy/w-agent/blob/main/README.md) · [Результаты CI, включая незавершённую проверку устройства](https://github.com/wromlyy/w-agent/actions/runs/{{BUILD_RUN}})
 
 W-Agent.apk.sha256 — контрольная сумма. W-Agent-Linux-Sources.tar.gz — исходники, лицензии и сборочные рецепты Linux-компонентов, для установки не требуется.

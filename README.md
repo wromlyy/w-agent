@@ -102,6 +102,8 @@ MCP OAuth, локальные/stdio MCP-серверы, Shizuku/беспрово
 
 ## Сборка и проверки
 
+Статус предварительной 0.3.1: debug/release сборки, lint и UI/logic тесты прошли в [42523404879](https://github.com/wromlyy/w-agent/actions/runs/42523404879). Итоговый тест Android 14 не прошёл: эмулятор пропадает из ADB без отчёта. Предыдущий прогон [42516954953](https://github.com/wromlyy/w-agent/actions/runs/42516954953) успешен, но не заменяет проверку финального APK. В последнем тесте аппаратное ускорение Activity отключается только из instrumentation; установленный APK сохраняет обычный рендеринг. Микрофон, графика и POCO/HyperOS ещё требуют проверки на физическом устройстве.
+
 Нужны Node.js 22+, JDK 17, Android SDK Platform 35, Build Tools 35.0.0, Android NDK 27.2.12479018 (Linux x86_64 для скрипта PTY), tar/xz и интернет для закреплённых зависимостей:
 
 ```sh
