@@ -113,7 +113,7 @@ public final class Agent implements Net.Cancel {
                 messages.put(new JSONObject().put("role","user").put("content","Утверждённый план. Выполняй с проверкой результата каждого шага:\n"+plan));
             }
             JSONArray tools=chatOnly?new JSONArray():Roles.filter(role,tools());int limit=chatOnly?1:Math.max(3,Math.min(100,settings.optInt("maxSteps",30)));
-            for(int step=0;step<limit;step++){
+            int reviews=0;for(int step=0;step<limit;step++){
                 check();synchronized(this){run.put("step",step+1);run.put("maxSteps",limit);}
                 if(!chatOnly&&settings.optBoolean("vision")&&DeviceService.live!=null){
                     String shot=DeviceService.live.screenshot();
@@ -126,7 +126,12 @@ public final class Agent implements Net.Cancel {
                 JSONArray calls=answer.optJSONArray("tool_calls");
                 if(chatOnly&&calls!=null&&calls.length()>0)throw new IllegalStateException("Модель запросила инструменты в режиме чата. Действия не выполнены.");
                 if(calls==null||calls.length()==0){if(text.trim().isEmpty())throw new IllegalStateException("Модель вернула пустой ответ. Выберите модель с поддержкой инструментов.");
-                    if(!chatOnly&&(settings.optBoolean("doubleCheck")||settings.optBoolean("teamMode"))){pass("Reviewer: оцени выполнение по фактам инструментов, укажи непроверенное и необходимые тесты", "Задача: "+task+"\nФакты выполнения:\n"+messages.toString()+"\nИтог исполнителя:\n"+text,profile);event("notice","Проверка Reviewer завершена. Оценка не заменяет тесты и факты инструментов.");}break;}
+                    if(!chatOnly&&(settings.optBoolean("doubleCheck")||settings.optBoolean("teamMode"))){
+                        StringBuilder facts=new StringBuilder();synchronized(this){JSONArray events=run.getJSONArray("events");for(int n=0;n<events.length();n++){JSONObject e=events.getJSONObject(n);if(Arrays.asList("action","result","verification").contains(e.optString("kind")))facts.append(e.optString("kind")).append(": ").append(e.optString("text")).append('\n');}}String evidence=facts.toString();if(evidence.length()>30000)evidence=evidence.substring(evidence.length()-30000);
+                        String review=pass("Reviewer: верни JSON {verdict: pass|continue|blocked, reason: строка}. Оцени выполнение по фактам, укажи непроверенное и необходимые тесты. Не подтверждай запуск тестов без фактического результата инструмента", "Задача: "+task+"\nФакты:\n"+evidence+"\nИтог исполнителя:\n"+text,profile);
+                        JSONObject verdict;try{verdict=new JSONObject(review.replaceFirst("^\\s*```(?:json)?","").replaceFirst("```\\s*$","").trim());}catch(Exception error){verdict=new JSONObject().put("verdict","blocked").put("reason","Reviewer не вернул проверяемый JSON");}
+                        if(!"pass".equals(verdict.optString("verdict"))){if("continue".equals(verdict.optString("verdict"))&&reviews++<2&&step<limit-1){messages.put(answer).put(new JSONObject().put("role","user").put("content","Reviewer требует дополнительной работы: "+verdict.optString("reason")+". Продолжи инструментами и проверь результат."));continue;}finalStatus="unverified";event("notice","Результат не подтверждён Reviewer: "+verdict.optString("reason"));}
+                    }break;}
                 messages.put(answer);
                 for(int i=0;i<calls.length();i++){
                     check();JSONObject call=calls.getJSONObject(i),f=call.getJSONObject("function");String name=f.getString("name"),result;
