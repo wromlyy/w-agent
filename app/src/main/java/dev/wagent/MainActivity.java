@@ -60,7 +60,7 @@ public class MainActivity extends Activity {
     public static boolean approve(String title,String detail) throws Exception {
         MainActivity a=foreground.get();if(a==null)throw new IllegalStateException("Откройте W Agent для подтверждения действия сервиса");
         CompletableFuture<Boolean> answer=new CompletableFuture<>();approval=answer;
-        a.runOnUiThread(()->{AlertDialog dialog=new AlertDialog.Builder(a).setTitle(title).setMessage(detail.length()>3000?detail.substring(0,3000):detail).setNegativeButton("Отклонить",(d,w)->answer.complete(false)).setPositiveButton("Разрешить",(d,w)->answer.complete(true)).setOnCancelListener(d->answer.complete(false)).create();dialog.show();answer.whenComplete((value,error)->a.runOnUiThread(dialog::dismiss));});
+        a.runOnUiThread(()->{AlertDialog dialog=new AlertDialog.Builder(a).setTitle(title).setMessage(detail).setNegativeButton("Отклонить",(d,w)->answer.complete(false)).setPositiveButton("Разрешить",(d,w)->answer.complete(true)).setOnCancelListener(d->answer.complete(false)).create();dialog.show();answer.whenComplete((value,error)->a.runOnUiThread(dialog::dismiss));});
         try{return answer.get(120,TimeUnit.SECONDS);}catch(TimeoutException e){answer.complete(false);return false;}finally{approval=null;}
     }
     public static void cancelApproval(){CompletableFuture<Boolean> p=approval;if(p!=null)p.complete(false);}
@@ -84,6 +84,12 @@ public class MainActivity extends Activity {
                         JSONObject screen=new JSONObject(service.screen());result=new JSONObject().put("connected",true).put("elements",screen.getJSONArray("elements").length()).put("screenAvailable",screen.has("package"));break;
                     }
                     case "save":app().vault.updateSettings(args);applyTheme();result=true;break;
+                    case "projectRead":result=new Project(app()).execute(args.put("action","read_file"));break;
+                    case "projectWrite":{
+                        Project project=new Project(app());JSONObject change=project.prepare(args.getString("folder"),args.getString("path"),args.getString("content"),null);
+                        if(!approve("Применить diff?",change.getString("preview")))throw new IllegalStateException("Изменение отклонено");result=project.apply(change);break;
+                    }
+                    case "checkpointRollback":if(!approve("Откатить файл?","Восстановить содержимое до выбранной правки?"))throw new IllegalStateException("Откат отклонён");result=new Project(app()).rollback(args.getString("id"));break;
                     case "terminalList":result=app().shell.list();break;
                     case "terminalKill":app().shell.kill(args.getString("id"));result=true;break;
                     case "terminalRun":{

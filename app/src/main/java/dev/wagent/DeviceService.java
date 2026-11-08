@@ -138,7 +138,7 @@ public class DeviceService extends AccessibilityService {
     private void maskPasswords(AccessibilityNodeInfo n,Canvas c,Paint p){if(n.isPassword()){Rect r=new Rect();n.getBoundsInScreen(r);c.drawRect(r,p);}for(int i=0;i<n.getChildCount();i++){AccessibilityNodeInfo child=n.getChild(i);if(child!=null){maskPasswords(child,c,p);child.recycle();}}}
     public boolean approve(String title,String detail) throws Exception {
         CompletableFuture<Boolean> answer=new CompletableFuture<>();pendingApproval=answer;
-        ui(()->{showOverlay(true,title,clip(detail,220),answer);return null;});
+        ui(()->{showOverlay(true,title,detail,answer);return null;});
         try {return answer.get(120,TimeUnit.SECONDS);}catch(TimeoutException e){return false;}
         finally{pendingApproval=null;main.post(()->{removeOverlay();if(((WApp)getApplication()).agent.running())showStop();});}
     }
@@ -149,7 +149,7 @@ public class DeviceService extends AccessibilityService {
         removeOverlay();LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(28,20,28,20);
         android.graphics.drawable.GradientDrawable bg=new android.graphics.drawable.GradientDrawable();bg.setColor(Color.rgb(38,61,48));bg.setCornerRadius(28);box.setBackground(bg);box.setElevation(12);
         TextView label=new TextView(this);label.setText(title);label.setTextColor(Color.WHITE);label.setTextSize(14);box.addView(label);
-        if(approval){TextView info=new TextView(this);info.setText(detail);info.setTextColor(Color.rgb(220,225,219));box.addView(info);LinearLayout buttons=new LinearLayout(this);
+        if(approval){TextView info=new TextView(this);info.setText(detail);info.setTextColor(Color.rgb(220,225,219));ScrollView scroll=new ScrollView(this);scroll.addView(info);box.addView(scroll,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,Math.min(getResources().getDisplayMetrics().heightPixels/2,Math.max(100,detail.length()*2))));LinearLayout buttons=new LinearLayout(this);
             Button no=new Button(this);no.setText("Отклонить");no.setOnClickListener(v->answer.complete(false));buttons.addView(no);
             Button yes=new Button(this);yes.setText("Разрешить");yes.setOnClickListener(v->answer.complete(true));buttons.addView(yes);box.addView(buttons);
         }else box.setOnClickListener(v->((WApp)getApplication()).agent.stop());
