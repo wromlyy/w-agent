@@ -12,6 +12,7 @@ public final class Agent implements Net.Cancel {
     private final JSONArray conversation=new JSONArray();
     private String chatId;
     private volatile RunGuard guard;
+    private JSONObject role;
     private volatile boolean paused;
     private String lastScreen="";
     private volatile CompletableFuture<String> planApproval;
@@ -35,14 +36,14 @@ public final class Agent implements Net.Cancel {
     public synchronized void start(String task,JSONArray attachments) throws Exception {
         if(running)throw new IllegalStateException("Сначала остановите текущую задачу");
         if(task.trim().isEmpty())throw new IllegalArgumentException("Напишите задачу");
-        JSONObject settings=app.vault.get();JSONArray profiles=settings.getJSONArray("profiles");JSONObject chosen=null;
-        for(int i=0;i<profiles.length();i++)if(profiles.getJSONObject(i).getString("id").equals(settings.optString("activeProfile")))chosen=profiles.getJSONObject(i);
+        JSONObject settings=app.vault.get();role=Roles.active(settings);JSONArray profiles=settings.getJSONArray("profiles");JSONObject chosen=null;
+        for(int i=0;i<profiles.length();i++)if(profiles.getJSONObject(i).getString("id").equals(role.optString("modelProfile").isEmpty()?settings.optString("activeProfile"):role.getString("modelProfile")))chosen=profiles.getJSONObject(i);
         if(chosen==null)throw new IllegalStateException("Добавьте подключение модели в настройках");
         if(chosen.optString("model").trim().isEmpty())throw new IllegalStateException("Укажите модель в настройках подключения");
         cancel=false;paused=false;guard=new RunGuard(settings.optInt("maxSteps",30),settings.optInt("maxSeconds",600),settings.optInt("maxTokens",60000),System.currentTimeMillis());lastScreen="";running=true;run=new JSONObject().put("id",UUID.randomUUID().toString()).put("chatId",chatId).put("task",task).put("started",System.currentTimeMillis()).put("status","running").put("events",new JSONArray());
         try{app.startForegroundService(new Intent(app,RunService.class));}catch(Exception e){running=false;throw e;}
         if(DeviceService.live!=null)DeviceService.live.showStop();
-        JSONObject profile=chosen;worker.submit(()->execute(task,attachments,settings,profile));
+        JSONObject profile=new JSONObject(chosen.toString());if(!"auto".equals(role.optString("effort","auto")))profile.put("effort",role.getString("effort"));worker.submit(()->execute(task,attachments,settings,profile));
     }
     public void approvePlan(String text){CompletableFuture<String> p=planApproval;if(p==null)throw new IllegalStateException("План сейчас не ожидает подтверждения");p.complete(text);}
     private String pass(String role,String prompt,JSONObject profile)throws Exception{
@@ -77,7 +78,7 @@ public final class Agent implements Net.Cancel {
         try{
             JSONArray messages=new JSONArray();
             boolean chatOnly="chat".equals(settings.optString("agentMode",profile.optString("mode","agent")));
-            String system=instructions(settings);
+            String system=instructions(settings)+"\nРоль пользователя: "+role.getString("name")+"\n"+role.getString("prompt");
             if(chatOnly)system+="\nСейчас включён режим обычного чата. Инструменты управления и вызовы сервисов недоступны. Отвечай на вопросы и работай с вложениями; если просят действие на телефоне, предложи выбрать модель с инструментами и режим Агент. Не заявляй, что выполнил действие.";
             messages.put(new JSONObject().put("role","system").put("content",system));
             synchronized(this){for(int i=0;i<conversation.length();i++)messages.put(new JSONObject(conversation.getJSONObject(i).toString()));}
@@ -99,7 +100,7 @@ public final class Agent implements Net.Cancel {
                 }
                 messages.put(new JSONObject().put("role","user").put("content","Утверждённый план. Выполняй с проверкой результата каждого шага:\n"+plan));
             }
-            JSONArray tools=chatOnly?new JSONArray():tools();int limit=chatOnly?1:Math.max(3,Math.min(100,settings.optInt("maxSteps",30)));
+            JSONArray tools=chatOnly?new JSONArray():Roles.filter(role,tools());int limit=chatOnly?1:Math.max(3,Math.min(100,settings.optInt("maxSteps",30)));
             for(int step=0;step<limit;step++){
                 check();synchronized(this){run.put("step",step+1);run.put("maxSteps",limit);}
                 if(!chatOnly&&settings.optBoolean("vision")&&DeviceService.live!=null){
@@ -143,6 +144,8 @@ public final class Agent implements Net.Cancel {
     }
     public synchronized void outputEvent(JSONObject file)throws Exception{run.getJSONArray("events").put(new JSONObject().put("kind","file").put("file",file).put("time",System.currentTimeMillis()));}
     private String tool(String name,JSONObject a,JSONObject settings) throws Exception {
+        if(!Roles.permits(role,name,a))throw new IllegalArgumentException("Роль запрещает этот инструмент или изменение. Действие не выполнено.");
+        if("ask_all".equals(role.optString("trust"))){DeviceService d=DeviceService.live;boolean yes=d!=null?d.approve("Разрешить шаг агента?",name+"\n"+redact(a.toString())):MainActivity.approve("Разрешить шаг агента?",name+"\n"+redact(a.toString()));if(!yes)return "Шаг отклонён. Не повторять.";check();}
         if("project".equals(name))return new Project(app).execute(a);
         if("memory".equals(name)){
             String action=a.getString("action");if("list".equals(action))return app.vault.get().optJSONArray("memories")==null?"[]":app.vault.get().getJSONArray("memories").toString();

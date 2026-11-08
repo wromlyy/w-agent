@@ -76,7 +76,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void post(String raw){
             io.execute(()->{String id="";try{JSONObject req=new JSONObject(raw);id=req.getString("id");String op=req.getString("op");JSONObject args=req.optJSONObject("args");if(args==null)args=new JSONObject();Object result=null;
                 switch(op){
-                    case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("device",DeviceStatus.get(MainActivity.this)).put("run",app().agent.state()).put("version","0.2.0");break;}
+                    case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");if(!visible.has("roles"))visible.put("roles",Roles.presets());result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("device",DeviceStatus.get(MainActivity.this)).put("run",app().agent.state()).put("version","0.2.0");break;}
                     case "state":result=new JSONObject().put("run",app().agent.state()).put("device",DeviceStatus.get(MainActivity.this)).put("accessibility",DeviceService.live!=null);break;
                     case "reconnect":handler.post(()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));result=true;break;
                     case "deviceTest":{
