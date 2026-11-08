@@ -39,7 +39,10 @@ public final class Agent implements Net.Cancel {
         String finalStatus="done";
         try{
             JSONArray messages=new JSONArray();
-            messages.put(new JSONObject().put("role","system").put("content",instructions(settings)));
+            boolean chatOnly="chat".equals(profile.optString("mode"));
+            String system=instructions(settings);
+            if(chatOnly)system+="\nСейчас включён режим обычного чата. Инструменты управления и вызовы сервисов недоступны. Отвечай на вопросы и работай с вложениями; если просят действие на телефоне, предложи выбрать модель с инструментами и режим Агент. Не заявляй, что выполнил действие.";
+            messages.put(new JSONObject().put("role","system").put("content",system));
             synchronized(this){for(int i=0;i<conversation.length();i++)messages.put(new JSONObject(conversation.getJSONObject(i).toString()));}
             JSONArray content=new JSONArray().put(new JSONObject().put("type","text").put("text",task));
             if(attachments!=null)for(int i=0;i<attachments.length();i++){
@@ -49,10 +52,10 @@ public final class Agent implements Net.Cancel {
                 else content.put(new JSONObject().put("type","file").put("file",new JSONObject().put("filename",f.getString("name")).put("file_data","data:"+mime+";base64,"+f.getString("data"))));
             }
             messages.put(new JSONObject().put("role","user").put("content",content));
-            JSONArray tools=tools();int limit=Math.max(3,Math.min(100,settings.optInt("maxSteps",30)));
+            JSONArray tools=chatOnly?new JSONArray():tools();int limit=chatOnly?1:Math.max(3,Math.min(100,settings.optInt("maxSteps",30)));
             for(int step=0;step<limit;step++){
                 check();synchronized(this){run.put("step",step+1);run.put("maxSteps",limit);}
-                if(settings.optBoolean("vision")&&DeviceService.live!=null){
+                if(!chatOnly&&settings.optBoolean("vision")&&DeviceService.live!=null){
                     String shot=DeviceService.live.screenshot();
                     if(shot!=null){JSONArray vision=new JSONArray().put(new JSONObject().put("type","text").put("text","Текущий экран. Координаты действий задаются в исходном размере из read_screen; изображение может быть уменьшено."))
                         .put(new JSONObject().put("type","image_url").put("image_url",new JSONObject().put("url","data:image/jpeg;base64,"+shot)));messages.put(new JSONObject().put("role","user").put("content",vision));}
@@ -61,6 +64,7 @@ public final class Agent implements Net.Cancel {
                 JSONObject answer=Models.complete(profile,messages,tools,this);check();
                 String text=answer.optString("content","");if(!text.trim().isEmpty()&&!"null".equals(text))event("assistant",text);
                 JSONArray calls=answer.optJSONArray("tool_calls");
+                if(chatOnly&&calls!=null&&calls.length()>0)throw new IllegalStateException("Модель запросила инструменты в режиме чата. Действия не выполнены.");
                 if(calls==null||calls.length()==0){if(text.trim().isEmpty())throw new IllegalStateException("Модель вернула пустой ответ. Выберите модель с поддержкой инструментов.");break;}
                 messages.put(answer);
                 for(int i=0;i<calls.length();i++){

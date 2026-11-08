@@ -17,6 +17,9 @@ async function boot(){
    case 'state':result={run,accessibility:true};break;
    case 'save':settings=JSON.parse(JSON.stringify(req.args));result=true;break;
    case 'models':result=['kimi-k2','deepseek-chat','qwen3-test'];break;
+   case 'freeModels':result=[{id:'openrouter/free',name:'Free router',tools:true,vision:true,context:100000},{id:'test/chat:free',name:'Chat model',tools:false,vision:false,context:32000}];break;
+   case 'authBegin':result=true;break;
+   case 'authComplete':settings.profiles.push({id:'auth-profile',name:'OpenRouter',model:'openrouter/free',freeOnly:true,preset:'openrouter'});settings.activeProfile='auth-profile';result=true;break;
    case 'apps':result=[{name:'YouTube',package:'com.google.android.youtube'},{name:'TikTok',package:'com.zhiliaoapp.musically'}];break;
    case 'run':run={task:req.args.task,running:true,status:'running',events:[],step:1,maxSteps:30};result=true;break;
    case 'newChat':run={};result=true;break;
@@ -68,5 +71,35 @@ test('settings persist and profile validation rejects unsafe URLs',async()=>{
   await a.click('[data-page=settings]');const toggle=a.w.document.querySelector('[data-setting=theme]');toggle.checked=true;toggle.dispatchEvent(new a.w.Event('change',{bubbles:true}));await pause();
   assert.equal(a.settings.theme,'dark');assert.equal(a.w.document.documentElement.dataset.theme,'dark');
   await a.click('[data-page=connections]');await a.click('[data-action=addProfile]');a.set('base','http://unsafe.example');a.set('model','model');await a.submit();assert.match(a.w.document.querySelector('#form-error').textContent,/https/);assert.equal(a.settings.profiles.length,0);
+ }finally{a.dom.window.close();}
+});
+test('free catalog selects chat-only mode and retains zero-price guard when editing',async()=>{
+ const a=await boot();try{
+  await a.click('[data-action=freeTab]');await pause();
+  assert.equal(a.w.document.querySelectorAll('[data-action=freePick]').length,2);
+  await a.click('[data-action=freePick][data-id="test/chat:free"]');
+  assert.equal(a.w.document.querySelector('[name=mode]').value,'chat');
+  a.set('key','test-free-key');await a.submit();
+  assert.equal(a.settings.profiles[0].freeOnly,true);assert.equal(a.settings.profiles[0].mode,'chat');
+  await a.click('[data-tab=models]');await a.click('[data-action=editProfile]');await a.submit();
+  assert.equal(a.settings.profiles[0].freeOnly,true);
+ }finally{a.dom.window.close();}
+});
+test('browser accounts never claim to be API connections and OpenRouter code finishes setup',async()=>{
+ const a=await boot();try{
+  await a.click('[data-page=connections]');await a.click('[data-tab=accounts]');await a.click('[data-action=accountOpen][data-id=chatgpt]');
+  assert.equal(a.calls.find(c=>c.op==='openAccount').args.account,'chatgpt');assert.equal(a.settings.profiles.length,0);
+  await a.click('[data-action=authBegin]');
+  a.w.document.querySelector('#auth-code').value='single-use-test-code';await a.click('[data-action=authComplete]');await pause();
+  assert.equal(a.settings.activeProfile,'auth-profile');
+  assert.ok(a.calls.some(c=>c.op==='authComplete'&&c.args.code==='single-use-test-code'));
+  assert.equal(a.w.document.querySelector('#auth-code'),null);
+ }finally{a.dom.window.close();}
+});
+test('restricted settings help opens app settings without claiming to grant permissions',async()=>{
+ const a=await boot();try{
+  await a.click('[data-action=accessibility]');assert.match(a.w.document.querySelector('.modal').textContent,/Разрешить ограниченные настройки/);
+  await a.click('[data-action=appSettings]');assert.ok(a.calls.some(c=>c.op==='appSettings'));
+  await a.click('[data-action=openAccessibility]');assert.ok(a.calls.some(c=>c.op==='accessibility'));
  }finally{a.dom.window.close();}
 });

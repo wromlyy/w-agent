@@ -79,4 +79,44 @@ public class ApiContractTest {
         responses.add(new Mock("",302,"application/json"));try{Net.request("GET","https://provider.test",null,null,()->false);fail();}catch(IOException expected){assertTrue(expected.getMessage().contains("302"));}
         respond("{}");try{Net.request("GET","https://provider.test",null,null,()->true);fail();}catch(InterruptedException expected){}
     }
+    private JSONObject catalogModel(String id,String prompt,String completion,boolean tools)throws Exception{
+        return new JSONObject().put("id",id).put("name",id).put("pricing",new JSONObject().put("prompt",prompt).put("completion",completion))
+            .put("architecture",new JSONObject().put("output_modalities",new JSONArray().put("text")).put("input_modalities",new JSONArray().put("text")))
+            .put("supported_parameters",tools?new JSONArray().put("tools"):new JSONArray());
+    }
+    @Test public void freeCatalogExcludesPaidHiddenFeesUnknownPricesAndNonTextModels()throws Exception{
+        JSONArray all=new JSONArray().put(catalogModel("free-agent","0","0",true)).put(catalogModel("free-chat","0.0","0",false)).put(catalogModel("paid:free","0.001","0",true));
+        JSONObject hidden=catalogModel("hidden","0","0",true);hidden.getJSONObject("pricing").put("request","0.1");all.put(hidden);
+        JSONObject unknown=catalogModel("unknown","0","0",true);unknown.getJSONObject("pricing").remove("completion");all.put(unknown);
+        JSONObject image=catalogModel("image","0","0",true);image.getJSONObject("architecture").put("output_modalities",new JSONArray().put("image"));all.put(image);
+        JSONArray free=Models.freeCatalog(all);assertEquals(2,free.length());assertTrue(free.getJSONObject(0).getBoolean("tools"));assertFalse(free.getJSONObject(1).getBoolean("tools"));
+    }
+    @Test public void freeRequestsRevalidateCatalogAndSetZeroMaximumPrice()throws Exception{
+        respond(new JSONObject().put("data",new JSONArray().put(catalogModel("openrouter/free","0","0",true))).toString());
+        respond("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"hello\"}}]}");
+        JSONObject p=profile("compatible").put("base","https://openrouter.ai/api/v1").put("model","openrouter/free").put("freeOnly",true);
+        Models.complete(p,messages(),tools(),()->false);
+        assertEquals("/api/v1/models",sent.get(0).getURL().getPath());assertNull(sent.get(0).getRequestProperty("Authorization"));
+        JSONObject request=sent.get(1).json();assertEquals(0,request.getJSONObject("provider").getJSONObject("max_price").getInt("prompt"));assertFalse(request.has("models"));
+        respond(new JSONObject().put("data",new JSONArray().put(catalogModel("openrouter/free","0.01","0",true))).toString());
+        try{Models.complete(p,messages(),tools(),()->false);fail();}catch(IllegalStateException expected){assertTrue(expected.getMessage().contains("бесплатная"));}
+        assertEquals(3,sent.size());
+    }
+    @Test public void chatOnlyOmitsUnsupportedToolFieldsAcrossProviders()throws Exception{
+        for(String type:new String[]{"compatible","anthropic","gemini"}){
+            if("compatible".equals(type))respond("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"hello\"}}]}");
+            if("anthropic".equals(type))respond("{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}");
+            if("gemini".equals(type))respond("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hello\"}]}}]}");
+            Models.complete(profile(type),messages(),new JSONArray(),()->false);JSONObject req=sent.get(sent.size()-1).json();assertFalse(req.has("tools"));assertFalse(req.has("parallel_tool_calls"));
+        }
+    }
+    @Test public void pkceChallengeMatchesRfcVectorAndRejectsExpiredFlowBeforeNetwork()throws Exception{
+        assertEquals("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",OpenRouterAuth.challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"));
+        JSONObject flow=OpenRouterAuth.begin(1000);assertTrue(flow.getString("verifier").length()>=43);
+        String url=OpenRouterAuth.url(flow);assertTrue(url.contains("code_challenge_method=S256"));assertFalse(url.contains(flow.getString("verifier")));assertFalse(url.contains("callback_url"));
+        try{OpenRouterAuth.exchange(flow,"test-code",601001,()->false);fail();}catch(IllegalArgumentException expected){}
+        assertEquals(0,sent.size());
+        respond("{\"key\":\"test-user-controlled-key\"}");assertEquals("test-user-controlled-key",OpenRouterAuth.exchange(flow,"test-code",2000,()->false));
+        JSONObject request=sent.get(0).json();assertEquals(flow.getString("verifier"),request.getString("code_verifier"));assertEquals("test-code",request.getString("code"));assertNull(sent.get(0).getRequestProperty("Authorization"));
+    }
 }

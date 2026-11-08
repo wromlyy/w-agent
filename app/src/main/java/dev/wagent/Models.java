@@ -9,14 +9,45 @@ public final class Models {
     public static JSONObject complete(JSONObject p,JSONArray messages,JSONArray tools,Net.Cancel cancel) throws Exception {
         String type=p.optString("type","compatible"),base=p.getString("base"),key=p.optString("key"),model=p.getString("model");
         if(model.trim().isEmpty())throw new IllegalArgumentException("Укажите модель в настройках подключения");
+        if(p.optBoolean("freeOnly")&&(!"compatible".equals(type)||!"https://openrouter.ai/api/v1".equals(base.replaceAll("/+$",""))))throw new IllegalArgumentException("Бесплатное подключение использует OpenRouter и OpenAI-совместимый формат");
         if("anthropic".equals(type))return anthropic(base,key,model,messages,tools,cancel);
         if("gemini".equals(type))return gemini(base,key,model,messages,tools,cancel);
-        JSONObject request=new JSONObject().put("model",model).put("messages",messages).put("tools",tools).put("parallel_tool_calls",false);
+        JSONObject request=new JSONObject().put("model",model).put("messages",messages);
+        if(tools.length()>0)request.put("tools",tools).put("parallel_tool_calls",false);
+        if(p.optBoolean("freeOnly")) {
+            if(!"https://openrouter.ai/api/v1".equals(base.replaceAll("/+$","")))throw new IllegalArgumentException("Бесплатное подключение использует OpenRouter");
+            JSONObject available=findFree(model,freeModels(cancel));
+            if(available==null)throw new IllegalStateException("Модель больше не указана как бесплатная. Обновите каталог или выберите openrouter/free.");
+            if(tools.length()>0&&!available.optBoolean("tools"))throw new IllegalStateException("Эта бесплатная модель подходит только для чата. Выберите режим Чат в подключении.");
+            request.put("provider",new JSONObject().put("max_price",new JSONObject().put("prompt",0).put("completion",0).put("request",0).put("image",0)));
+        }
         JSONObject response=Net.request("POST",Net.join(base,"chat/completions"),Net.bearer(key),request.toString(),cancel).json();
         JSONArray choices=response.optJSONArray("choices");
         if(choices==null||choices.length()==0)throw new IllegalStateException("Сервер не вернул ответ chat/completions. Проверьте протокол подключения.");
         return choices.getJSONObject(0).getJSONObject("message");
     }
+    public static JSONArray freeModels(Net.Cancel cancel) throws Exception {
+        JSONObject response=Net.request("GET","https://openrouter.ai/api/v1/models",null,null,cancel).json();
+        return freeCatalog(response.getJSONArray("data"));
+    }
+    static JSONArray freeCatalog(JSONArray data) throws Exception {
+        JSONArray out=new JSONArray();
+        for(int i=0;i<data.length();i++){
+            JSONObject m=data.getJSONObject(i),p=m.optJSONObject("pricing"),arch=m.optJSONObject("architecture");
+            if(p==null||!p.has("prompt")||!p.has("completion"))continue;
+            boolean zero=true;Iterator<String> fields=p.keys();
+            while(fields.hasNext()){String field=fields.next();try{if(new java.math.BigDecimal(p.get(field).toString()).compareTo(java.math.BigDecimal.ZERO)!=0)zero=false;}catch(Exception e){zero=false;}}
+            if(!zero)continue;
+            JSONArray output=arch==null?null:arch.optJSONArray("output_modalities");
+            if(output==null||!contains(output,"text"))continue;
+            JSONArray params=m.optJSONArray("supported_parameters"),input=arch.optJSONArray("input_modalities");
+            out.put(new JSONObject().put("id",m.getString("id")).put("name",m.optString("name",m.getString("id")))
+                .put("tools",contains(params,"tools")).put("vision",contains(input,"image")).put("context",m.optInt("context_length",0)));
+        }
+        return out;
+    }
+    static JSONObject findFree(String id,JSONArray catalog) throws Exception {for(int i=0;i<catalog.length();i++)if(id.equals(catalog.getJSONObject(i).getString("id")))return catalog.getJSONObject(i);return null;}
+    private static boolean contains(JSONArray a,String value){if(a!=null)for(int i=0;i<a.length();i++)if(value.equals(a.optString(i)))return true;return false;}
     public static JSONArray models(JSONObject p,Net.Cancel cancel) throws Exception {
         String type=p.optString("type"),url=Net.join(p.getString("base"),"models");Map<String,String> h=Net.bearer(p.optString("key"));
         if("anthropic".equals(type)){h=new HashMap<>();h.put("x-api-key",p.optString("key"));h.put("anthropic-version","2023-06-01");}
@@ -45,7 +76,9 @@ public final class Models {
             if(content.length()>0)ms.put(new JSONObject().put("role",role).put("content",content));
         }
         Map<String,String> h=new HashMap<>();h.put("x-api-key",key);h.put("anthropic-version","2023-06-01");
-        JSONObject r=Net.request("POST",Net.join(base,"messages"),h,new JSONObject().put("model",model).put("max_tokens",4096).put("system",system.toString()).put("messages",ms).put("tools",ts).toString(),cancel).json();
+        JSONObject request=new JSONObject().put("model",model).put("max_tokens",4096).put("system",system.toString()).put("messages",ms);
+        if(ts.length()>0)request.put("tools",ts);
+        JSONObject r=Net.request("POST",Net.join(base,"messages"),h,request.toString(),cancel).json();
         JSONArray calls=new JSONArray(),content=r.getJSONArray("content");StringBuilder text=new StringBuilder();
         for(int i=0;i<content.length();i++){JSONObject b=content.getJSONObject(i);if("text".equals(b.optString("type")))text.append(b.optString("text"));if("tool_use".equals(b.optString("type")))calls.put(call(b.getString("id"),b.getString("name"),b.getJSONObject("input")));}
         return new JSONObject().put("role","assistant").put("content",text.toString()).put("tool_calls",calls);
@@ -72,6 +105,7 @@ public final class Models {
             if(parts.length()>0)contents.put(new JSONObject().put("role","assistant".equals(role)?"model":role).put("parts",parts));
         }
         JSONObject req=new JSONObject().put("contents",contents).put("systemInstruction",new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text",system.toString())))).put("tools",new JSONArray().put(new JSONObject().put("functionDeclarations",decl)));
+        if(decl.length()==0)req.remove("tools");
         Map<String,String> h=new HashMap<>();h.put("x-goog-api-key",key);
         String name=URLEncoder.encode(model,"UTF-8").replace("+","%20");
         JSONObject r=Net.request("POST",Net.join(base,"models/"+name+":generateContent"),h,req.toString(),cancel).json();

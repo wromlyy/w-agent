@@ -68,15 +68,37 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void post(String raw){
             io.execute(()->{String id="";try{JSONObject req=new JSONObject(raw);id=req.getString("id");String op=req.getString("op");JSONObject args=req.optJSONObject("args");if(args==null)args=new JSONObject();Object result=null;
                 switch(op){
-                    case "init":result=new JSONObject().put("settings",app().vault.get()).put("accessibility",DeviceService.live!=null).put("run",app().agent.state()).put("version","0.1.0");break;
+                    case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("run",app().agent.state()).put("version","0.2.0");break;}
                     case "state":result=new JSONObject().put("run",app().agent.state()).put("accessibility",DeviceService.live!=null);break;
                     case "save":app().vault.updateSettings(args);result=true;break;
                     case "run":app().agent.start(args.getString("task"),args.optJSONArray("files"));result=true;break;
                     case "stop":app().agent.stop();result=true;break;
                     case "newChat":app().agent.newChat();result=true;break;
                     case "models":result=Models.models(args,()->false);break;
+                    case "freeModels":result=Models.freeModels(()->false);break;
+                    case "authBegin":{
+                        if(app().agent.running())throw new IllegalStateException("Остановите задачу перед входом в аккаунт");
+                        JSONObject flow=OpenRouterAuth.begin(System.currentTimeMillis());app().vault.save(app().vault.get().put("pendingAuth",flow));
+                        String url=OpenRouterAuth.url(flow);handler.post(()->startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))));result=true;break;
+                    }
+                    case "authComplete":{
+                        JSONObject state=app().vault.get();String key=OpenRouterAuth.exchange(state.optJSONObject("pendingAuth"),args.getString("code"),System.currentTimeMillis(),()->false);
+                        state=app().vault.get();state.remove("pendingAuth");
+                        JSONArray profiles=state.getJSONArray("profiles");String profileId="openrouter-login";
+                        JSONObject profile=new JSONObject().put("id",profileId).put("preset","openrouter").put("name","OpenRouter · бесплатно").put("type","compatible").put("base","https://openrouter.ai/api/v1").put("key",key).put("model","openrouter/free").put("freeOnly",true).put("mode","agent");
+                        boolean found=false;for(int i=0;i<profiles.length();i++)if(profileId.equals(profiles.getJSONObject(i).optString("id"))){profiles.put(i,profile);found=true;break;}
+                        if(!found)profiles.put(profile);app().vault.save(state.put("profiles",profiles).put("activeProfile",profileId));result=true;break;
+                    }
+                    case "authCancel":{JSONObject state=app().vault.get();state.remove("pendingAuth");app().vault.save(state);result=true;break;}
+                    case "openAccount":{
+                        if(app().agent.running())throw new IllegalStateException("Остановите задачу перед входом в аккаунт");
+                        Map<String,String> accounts=new HashMap<>();accounts.put("chatgpt","https://chatgpt.com/");accounts.put("gemini","https://gemini.google.com/");accounts.put("grok","https://grok.com/");accounts.put("claude","https://claude.ai/");accounts.put("kimi","https://www.kimi.com/");accounts.put("deepseek","https://chat.deepseek.com/");accounts.put("qwen","https://chat.qwen.ai/");accounts.put("relay","https://codex-relay.codes/");
+                        String url=accounts.get(args.optString("account"));if(url==null)throw new IllegalArgumentException("Неизвестный сервис");
+                        handler.post(()->startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))));result=true;break;
+                    }
                     case "testService":result=Connections.execute(args,new JSONObject().put("method","GET").put("path","api.github.com".equals(Uri.parse(args.optString("url")).getHost())?"user":"").put("operation","tools/list"),()->false);break;
                     case "apps":result=apps(MainActivity.this,true);break;
+                    case "appSettings":handler.post(()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))));result=true;break;
                     case "accessibility":handler.post(()->{new AlertDialog.Builder(MainActivity.this).setTitle("Управление телефоном").setMessage("Во время задачи W Agent сможет читать открытый экран, нажимать кнопки и вводить текст. Текст экрана и, если вы включите снимки, изображения отправляются выбранному поставщику модели. Включите W Agent в разделе скачанных служб. Остановить задачу можно кнопкой W поверх приложений.").setNegativeButton("Отмена",null).setPositiveButton("Открыть настройки",(d,w)->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))).show();});result=true;break;
                     case "notifications":handler.post(()->{if(Build.VERSION.SDK_INT>=33)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},4);});result=true;break;
                     case "pick":{String callback=id,mode=args.optString("mode","files");handler.post(()->pick(callback,mode));return;}
