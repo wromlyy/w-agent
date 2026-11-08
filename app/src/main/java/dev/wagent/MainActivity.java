@@ -85,6 +85,7 @@ public class MainActivity extends Activity {
                     }
                     case "save":app().vault.updateSettings(args);applyTheme();result=true;break;
                     case "run":app().agent.start(args.getString("task"),args.optJSONArray("files"));result=true;break;
+                    case "planApprove":app().agent.approvePlan(args.getString("plan"));result=true;break;
                     case "pause":app().agent.pause(args.optBoolean("paused",true));result=true;break;
                     case "stop":app().agent.stop();result=true;break;
                     case "newChat":app().agent.newChat();result=true;break;
