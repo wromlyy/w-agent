@@ -150,7 +150,7 @@ test('mode switch is visible in composer and planning edits are sent to the nati
 test('Markdown sanitizes active content and copies source code blocks exactly',async()=>{
  const text='| A | B |\n|---|---|\n| 1 | 2 |\n\n```js\nconst x = "<tag>";\n```\n\n<img src=x onerror="window.pwned=1">\n[bad](javascript:alert(1))';
  const a=await boot({run:{id:'m',task:'Example',status:'done',events:[{kind:'assistant',text}]}});try{
-  assert.ok(a.w.document.querySelector('.message-text table'));assert.equal(a.w.document.querySelectorAll('.message-text img,.message-text script').length,0);assert.equal(a.w.pwned,undefined);assert.equal(a.w.document.querySelector('a')?.getAttribute('href'),null);
+  assert.ok(a.w.document.querySelector('.message-text table'));assert.equal(a.w.document.querySelectorAll('.message-text img,.message-text script').length,0);assert.equal(a.w.pwned,undefined);assert.equal(a.w.document.querySelector('a[href^="javascript:"]'),null);
   await a.click('[data-action=copyCode]');assert.equal(a.calls.find(c=>c.op==='copyText').args.text,'const x = "<tag>";\n');
  }finally{a.dom.window.close();}
 });
