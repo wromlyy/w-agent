@@ -22,6 +22,7 @@ public class MainActivity extends Activity {
     private static volatile java.lang.ref.WeakReference<MainActivity> foreground=new java.lang.ref.WeakReference<>(null);
     private static volatile CompletableFuture<Boolean> approval;
     private WebView web;
+    private Voice voice;
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final Handler handler=new Handler(Looper.getMainLooper());
     private String pickerId,pickerMode;
@@ -29,7 +30,7 @@ public class MainActivity extends Activity {
     private String saveOutputId;
     private WApp app(){return (WApp)getApplication();}
     @Override public void onCreate(Bundle saved){
-        super.onCreate(saved);
+        super.onCreate(saved);voice=new Voice(this);
         web=new WebView(this);web.setBackgroundColor(Color.rgb(245,244,240));setContentView(web);
         applyTheme();
         if(Build.VERSION.SDK_INT>=35){getWindow().setDecorFitsSystemWindows(false);web.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});}
@@ -64,7 +65,7 @@ public class MainActivity extends Activity {
         try{return answer.get(120,TimeUnit.SECONDS);}catch(TimeoutException e){answer.complete(false);return false;}finally{approval=null;}
     }
     public static void cancelApproval(){CompletableFuture<Boolean> p=approval;if(p!=null)p.complete(false);}
-    @Override protected void onDestroy(){io.shutdownNow();if(web!=null){web.removeJavascriptInterface("WNative");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){io.shutdownNow();if(voice!=null)voice.close();if(web!=null){web.removeJavascriptInterface("WNative");web.destroy();web=null;}super.onDestroy();}
     @Override public void onBackPressed(){if(web!=null)web.evaluateJavascript("window.goBack && window.goBack()",null);}
     private void reply(String id,Object value,String error){
         String encoded;
@@ -84,6 +85,9 @@ public class MainActivity extends Activity {
                         JSONObject screen=new JSONObject(service.screen());result=new JSONObject().put("connected",true).put("elements",screen.getJSONArray("elements").length()).put("screenAvailable",screen.has("package"));break;
                     }
                     case "save":app().vault.updateSettings(args);applyTheme();result=true;break;
+                    case "voiceListen":{String callback=id;handler.post(()->voice.listen((text,error)->reply(callback,text,error)));return;}
+                    case "voiceSpeak":{String callback=id,text=args.getString("text");handler.post(()->voice.speak(text,(value,error)->reply(callback,value,error)));return;}
+                    case "voiceStop":handler.post(voice::stop);result=true;break;
                     case "compactContext":result=app().agent.compact();break;
                     case "projectRead":result=new Project(app()).execute(args.put("action","read_file"));break;
                     case "projectWrite":{
