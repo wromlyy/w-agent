@@ -133,7 +133,7 @@ public class MainActivity extends Activity {
                     case "notifications":handler.post(()->{if(Build.VERSION.SDK_INT>=33)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},4);});result=true;break;
                     case "pick":{String callback=id,mode=args.optString("mode","files");handler.post(()->pick(callback,mode));return;}
                     case "export":{exportData=app().vault.get();String callback=id;handler.post(()->{pickerId=callback;pickerMode="export";Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"w-agent-history.json");startActivityForResult(i,51);});return;}
-                    case "clearHistory":{JSONObject next=app().vault.get().put("history",new JSONArray());app().vault.save(next);result=true;break;}
+                    case "clearHistory":{if(app().agent.running())throw new IllegalStateException("Сначала остановите задачу");app().agent.newChat();JSONObject next=app().vault.get().put("history",new JSONArray());app().vault.save(next);result=true;break;}
                     case "openLink":{Uri uri=Uri.parse(args.getString("url"));if(!"https".equals(uri.getScheme()))throw new IllegalArgumentException("Нужна HTTPS-ссылка");handler.post(()->startActivity(new Intent(Intent.ACTION_VIEW,uri)));result=true;break;}
                     default:throw new IllegalArgumentException("Неизвестная команда");
                 }reply(id,result,null);
@@ -153,7 +153,7 @@ public class MainActivity extends Activity {
         if(result!=RESULT_OK||data==null){reply(id,new JSONArray(),null);return;}
         io.execute(()->{try{
             if("folder".equals(mode)){
-                Uri tree=data.getData();if(tree==null)throw new IOException("Папка не выбрана");int grants=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);getContentResolver().takePersistableUriPermission(tree,grants);reply(id,new FilesStore(app()).addFolder(tree),null);return;
+                Uri tree=data.getData();if(tree==null)throw new IOException("Папка не выбрана");if((data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION)==0)throw new IOException("Android не выдал доступ к папке");if((data.getFlags()&Intent.FLAG_GRANT_WRITE_URI_PERMISSION)!=0)getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);else getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION);reply(id,new FilesStore(app()).addFolder(tree),null);return;
             }
             if("saveOutput".equals(mode)){
                 FilesStore store=new FilesStore(app());try(InputStream in=new FileInputStream(store.outputFile(saveOutputId));OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new IOException("Файл недоступен для записи");byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}saveOutputId=null;reply(id,true,null);return;

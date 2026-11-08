@@ -6,10 +6,10 @@ const html=fs.readFileSync('app/src/main/assets/index.html','utf8');
 const script=fs.readFileSync('app/src/main/assets/app.js','utf8');
 const pause=()=>new Promise(r=>setImmediate(r));
 
-async function boot(){
+async function boot(seed={}){
  const dom=new JSDOM(html,{url:'https://app.wagent.local/',runScripts:'outside-only'});
  const w=dom.window,calls=[];
- let settings={profiles:[],services:[],skills:[],history:[],activeProfile:'',theme:'light',vision:false,maxSteps:30},run={};
+ let settings={profiles:[],services:[],skills:[],history:[],activeProfile:'',theme:'light',vision:false,maxSteps:30,...seed.settings},run=seed.run||{};
  w.WNative={post(raw){const req=JSON.parse(raw);calls.push(req);queueMicrotask(()=>{
   let result;
   switch(req.op){
@@ -26,6 +26,10 @@ async function boot(){
    case 'stop':run={...run,running:false,status:'stopped'};result=true;break;
    case 'pick':result=[{id:'file1',name:'<img src=x>.md',mime:'text/markdown',text:'# File',size:7}];break;
    case 'testService':result='{}';break;
+   case 'folderPick':settings.folders=[{id:'folder-1',name:'Documents',uri:'content://test/tree'}];result=settings.folders[0];break;
+   case 'fileList':result=[{name:'notes.txt',path:'notes.txt',directory:false,size:12}];break;
+   case 'fileAttach':result={id:'attachment-1',name:'notes.txt',mime:'text/plain',size:12,text:'device file'};break;
+   case 'fileOutput':result={id:'output-1',name:req.args.name,mime:'text/markdown',size:req.args.content.length};settings.outputs=[result];break;
    default:result=true;
   }
   w.nativeReply(req.id,JSON.parse(JSON.stringify(result)),null);
@@ -101,5 +105,31 @@ test('restricted settings help opens app settings without claiming to grant perm
   await a.click('[data-action=accessibility]');assert.match(a.w.document.querySelector('.modal').textContent,/Разрешить ограниченные настройки/);
   await a.click('[data-action=appSettings]');assert.ok(a.calls.some(c=>c.op==='appSettings'));
   await a.click('[data-action=openAccessibility]');assert.ok(a.calls.some(c=>c.op==='accessibility'));
+ }finally{a.dom.window.close();}
+});
+test('continuous chat keeps previous messages and copies exact assistant text',async()=>{
+ const one={id:'turn1',chatId:'chat1',task:'First task',status:'done',events:[{kind:'assistant',text:'First reply\nwith code <example>'}]};
+ const two={id:'turn2',chatId:'chat1',task:'Second task',status:'done',running:false,events:[{kind:'assistant',text:'Second reply'}]};
+ const a=await boot({settings:{history:[one,two]},run:two});try{
+  assert.equal(a.w.document.querySelectorAll('.chat-turn').length,2);
+  assert.equal(a.w.document.querySelector('.message-text').textContent,'First reply\nwith code <example>');
+  await a.click('[data-action=copyMessage][data-run=turn1]');assert.equal(a.calls.find(c=>c.op==='copyText').args.text,one.events[0].text);
+  await a.click('[data-action=saveMessage][data-run=turn2]');assert.equal(a.calls.find(c=>c.op==='fileOutput').args.content,'Second reply');
+  assert.ok(a.w.document.querySelector('[data-action=saveOutput]'));assert.ok(a.w.document.querySelector('[data-action=shareOutput]'));
+ }finally{a.dom.window.close();}
+});
+test('reasoning controls retain effort and thinking mode on the selected provider',async()=>{
+ const p={id:'p1',name:'OpenRouter',preset:'openrouter',base:'https://openrouter.ai/api/v1',type:'compatible',model:'test-model'};
+ const a=await boot({settings:{profiles:[p],activeProfile:'p1'}});try{
+  await a.click('[data-action=reasonMenu]');a.set('thinking','on');a.set('effort','xhigh');await a.submit();
+  assert.equal(a.settings.profiles[0].effort,'xhigh');assert.equal(a.settings.profiles[0].thinking,'on');assert.match(a.w.document.querySelector('.reasoning-chip').textContent,/Extreme/);
+ }finally{a.dom.window.close();}
+});
+test('device folder selection and browsing attach the selected file to the chat',async()=>{
+ const a=await boot();try{
+  await a.click('[data-page=files]');await a.click('[data-action=folderPick]');await a.click('[data-action=openFolder]');await pause();
+  await a.click('[data-action=fileMenu]');await a.click('[data-action=attachDeviceFile]');
+  assert.equal(a.calls.find(c=>c.op==='fileAttach').args.folder,'folder-1');assert.equal(a.calls.find(c=>c.op==='fileAttach').args.path,'notes.txt');
+  assert.equal(a.w.document.querySelector('.file-chip span').textContent,'notes.txt');
  }finally{a.dom.window.close();}
 });
