@@ -19,6 +19,8 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
+    private static volatile java.lang.ref.WeakReference<MainActivity> foreground=new java.lang.ref.WeakReference<>(null);
+    private static volatile CompletableFuture<Boolean> approval;
     private WebView web;
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -45,8 +47,15 @@ public class MainActivity extends Activity {
         });
         web.addJavascriptInterface(new Bridge(),"WNative");web.loadUrl("https://app.wagent.local/index.html");
     }
-    @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
-    @Override protected void onPause(){if(web!=null)web.onPause();super.onPause();}
+    @Override protected void onResume(){super.onResume();foreground=new java.lang.ref.WeakReference<>(this);if(web!=null)web.onResume();}
+    @Override protected void onPause(){foreground.clear();if(web!=null)web.onPause();super.onPause();}
+    public static boolean approve(String title,String detail) throws Exception {
+        MainActivity a=foreground.get();if(a==null)throw new IllegalStateException("Откройте W Agent для подтверждения действия сервиса");
+        CompletableFuture<Boolean> answer=new CompletableFuture<>();approval=answer;
+        a.runOnUiThread(()->{AlertDialog dialog=new AlertDialog.Builder(a).setTitle(title).setMessage(detail.length()>3000?detail.substring(0,3000):detail).setNegativeButton("Отклонить",(d,w)->answer.complete(false)).setPositiveButton("Разрешить",(d,w)->answer.complete(true)).setOnCancelListener(d->answer.complete(false)).create();dialog.show();answer.whenComplete((value,error)->a.runOnUiThread(dialog::dismiss));});
+        try{return answer.get(120,TimeUnit.SECONDS);}catch(TimeoutException e){answer.complete(false);return false;}finally{approval=null;}
+    }
+    public static void cancelApproval(){CompletableFuture<Boolean> p=approval;if(p!=null)p.complete(false);}
     @Override protected void onDestroy(){io.shutdownNow();if(web!=null){web.removeJavascriptInterface("WNative");web.destroy();web=null;}super.onDestroy();}
     @Override public void onBackPressed(){if(web!=null)web.evaluateJavascript("window.goBack && window.goBack()",null);}
     private void reply(String id,Object value,String error){

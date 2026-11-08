@@ -27,7 +27,7 @@ public final class Agent implements Net.Cancel {
         if(DeviceService.live!=null)DeviceService.live.showStop();
         JSONObject profile=chosen;worker.submit(()->execute(task,attachments,settings,profile));
     }
-    public void stop(){cancel=true;DeviceService s=DeviceService.live;if(s!=null)s.cancelApproval();}
+    public void stop(){cancel=true;DeviceService s=DeviceService.live;if(s!=null)s.cancelApproval();MainActivity.cancelApproval();}
     private synchronized void event(String kind,String text) {
         try{run.getJSONArray("events").put(new JSONObject().put("kind",kind).put("text",redact(text)).put("time",System.currentTimeMillis()));}catch(Exception ignored){}
     }
@@ -101,8 +101,9 @@ public final class Agent implements Net.Cancel {
             if(target==null)throw new IllegalArgumentException("Подключение не найдено");
             if(a.has("params_json")&&!a.optString("params_json").trim().isEmpty())a.put("params",new JSONObject(a.getString("params_json")));
             boolean write="mcp".equals(target.optString("type"))?"tools/call".equals(a.optString("operation")):!"GET".equalsIgnoreCase(a.optString("method","GET"));
-            if(write){DeviceService s=DeviceService.live;if(s==null)throw new IllegalStateException("Для подтверждения операции включите службу W Agent");
-                if(!s.approve("Разрешить действие сервиса?",target.optString("name")+"\n"+a.toString()))return "Пользователь отклонил действие. Не повторять.";check();}
+            if(write){DeviceService s=DeviceService.live;String detail=target.optString("name")+"\n"+a.toString();
+                boolean accepted=s!=null?s.approve("Разрешить действие сервиса?",detail):MainActivity.approve("Разрешить действие сервиса?",detail);
+                if(!accepted)return "Пользователь отклонил действие. Не повторять.";check();}
             return Connections.execute(target,a,this);
         }
         throw new IllegalArgumentException("Неизвестный инструмент");

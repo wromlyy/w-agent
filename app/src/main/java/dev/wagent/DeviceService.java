@@ -149,7 +149,16 @@ public class DeviceService extends AccessibilityService {
             Button yes=new Button(this);yes.setText("Разрешить");yes.setOnClickListener(v->answer.complete(true));buttons.addView(yes);box.addView(buttons);
         }else box.setOnClickListener(v->((WApp)getApplication()).agent.stop());
         WindowManager.LayoutParams lp=new WindowManager.LayoutParams(approval?Math.min(getResources().getDisplayMetrics().widthPixels-40,900):WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT);
-        lp.gravity=Gravity.TOP|Gravity.END;lp.x=16;lp.y=80;wm.addView(box,lp);overlay=box;
+        lp.gravity=Gravity.TOP|Gravity.START;lp.x=16;lp.y=approval?80:getResources().getDisplayMetrics().heightPixels/2;
+        if(!approval)box.setOnTouchListener(new View.OnTouchListener(){
+            float downX,downY;int startX,startY;boolean moved;
+            @Override public boolean onTouch(View v,MotionEvent e){
+                if(e.getAction()==MotionEvent.ACTION_DOWN){downX=e.getRawX();downY=e.getRawY();startX=lp.x;startY=lp.y;moved=false;return true;}
+                if(e.getAction()==MotionEvent.ACTION_MOVE){float dx=e.getRawX()-downX,dy=e.getRawY()-downY;if(Math.abs(dx)+Math.abs(dy)>12)moved=true;if(moved){lp.x=Math.max(0,Math.min(getResources().getDisplayMetrics().widthPixels-v.getWidth(),startX+(int)dx));lp.y=Math.max(0,Math.min(getResources().getDisplayMetrics().heightPixels-v.getHeight(),startY+(int)dy));try{wm.updateViewLayout(v,lp);}catch(Exception ignored){}}return true;}
+                if(e.getAction()==MotionEvent.ACTION_UP){if(!moved)v.performClick();return true;}return true;
+            }
+        });
+        wm.addView(box,lp);overlay=box;
     }
     private void removeOverlay(){if(overlay!=null&&wm!=null){try{wm.removeView(overlay);}catch(Exception ignored){}overlay=null;}}
 }

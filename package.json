@@ -1,6 +1,11 @@
 {
   "name": "w-agent-ui-checks",
   "private": true,
-  "scripts": { "test": "node --test tools/ui.test.cjs" },
-  "devDependencies": { "jsdom": "26.1.0" }
+  "scripts": {
+    "test": "node --test tools/ui.test.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0",
+    "playwright-core": "1.56.1"
+  }
 }

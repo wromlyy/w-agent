@@ -24,6 +24,13 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm test
+      - name: Render UI previews
+        run: node tools/render-ui.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-previews
+          path: .private/previews/
+          include-hidden-files: true
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
@@ -40,7 +47,7 @@ jobs:
       - name: Install SDK
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Build installable APK
-        run: sh gradlew assembleDebug lintDebug --stacktrace
+        run: sh gradlew assembleDebug lintDebug testDebugUnitTest --stacktrace
       - name: Name APK
         run: cp app/build/outputs/apk/debug/app-debug.apk W-Agent.apk
       - uses: actions/upload-artifact@v4
