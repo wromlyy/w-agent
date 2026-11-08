@@ -1,4 +1,4 @@
-name: Publish verified 0.3 release
+name: Publish verified release
 on:
   workflow_dispatch:
     inputs:
@@ -6,6 +6,11 @@ on:
         description: Successful Build APK run ID to publish
         required: true
         type: string
+      version:
+        description: Release tag
+        required: true
+        type: string
+        default: v0.3.1
 permissions:
   actions: read
   contents: write
@@ -17,6 +22,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       BUILD_RUN: ${{ inputs.build_run }}
+      RELEASE_TAG: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
       - name: Require successful main-branch build and device checks
@@ -24,6 +30,7 @@ jobs:
         shell: bash
         run: |
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
           jq -e '.status == "completed" and .conclusion == "success" and .head_branch == "main" and .event == "push" and .name == "Build APK"' run.json
           build_sha=$(jq -r .head_sha run.json)
@@ -38,11 +45,12 @@ jobs:
         run: |
           sha256sum -c W-Agent.apk.sha256
           test -s W-Agent-Linux-Sources.tar.gz
+          grep -F "versionName='${RELEASE_TAG#v}'" apk-package.txt
       - name: Publish APK and source archive
         env:
           BUILD_SHA: ${{ steps.verified.outputs.sha }}
         shell: bash
         run: |
-          sed "s/{{BUILD_RUN}}/$BUILD_RUN/g" .github/release-v03.md > release-notes.md
-          gh release create v0.3.0 release-assets/W-Agent.apk release-assets/W-Agent.apk.sha256 release-assets/W-Agent-Linux-Sources.tar.gz --target "$BUILD_SHA" --title 'W Agent 0.3' --draft --prerelease --notes-file release-notes.md
-          gh release edit v0.3.0 --draft=false --prerelease
+          sed "s/{{BUILD_RUN}}/$BUILD_RUN/g" .github/release-v031.md > release-notes.md
+          gh release create "$RELEASE_TAG" release-assets/W-Agent.apk release-assets/W-Agent.apk.sha256 release-assets/W-Agent-Linux-Sources.tar.gz --target "$BUILD_SHA" --title "W Agent ${RELEASE_TAG#v}" --draft --prerelease --notes-file release-notes.md
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease
