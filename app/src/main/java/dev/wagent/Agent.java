@@ -11,6 +11,9 @@ public final class Agent implements Net.Cancel {
     private JSONObject run=new JSONObject();
     private final JSONArray conversation=new JSONArray();
     private String chatId;
+    private volatile RunGuard guard;
+    private volatile boolean paused;
+    private String lastScreen="";
     public Agent(WApp app){this.app=app;try{JSONObject state=app.vault.get();chatId=state.optString("currentChat",UUID.randomUUID().toString());app.vault.save(state.put("currentChat",chatId));restoreConversation();}catch(Exception e){chatId=UUID.randomUUID().toString();}}
     public boolean running(){return running;}
     public synchronized void newChat()throws Exception{if(running)throw new IllegalStateException("Сначала остановите задачу");chatId=UUID.randomUUID().toString();app.vault.save(app.vault.get().put("currentChat",chatId));while(conversation.length()>0)conversation.remove(0);run=new JSONObject();}
@@ -26,8 +29,8 @@ public final class Agent implements Net.Cancel {
             String answer=text.toString();if(answer.length()>7000)answer=answer.substring(answer.length()-7000);conversation.put(new JSONObject().put("role","assistant").put("content",answer.isEmpty()?"Статус: "+item.optString("status"):answer));run=new JSONObject(item.toString());
         }while(conversation.length()>12)conversation.remove(0);
     }
-    @Override public boolean cancelled(){return cancel;}
-    public synchronized JSONObject state() throws Exception {return new JSONObject(run.toString()).put("running",running).put("chatId",chatId);}
+    @Override public boolean cancelled(){return cancel||(guard!=null&&guard.expired(System.currentTimeMillis()));}
+    public synchronized JSONObject state() throws Exception {return new JSONObject(run.toString()).put("running",running).put("chatId",chatId).put("paused",paused);}
     public synchronized void start(String task,JSONArray attachments) throws Exception {
         if(running)throw new IllegalStateException("Сначала остановите текущую задачу");
         if(task.trim().isEmpty())throw new IllegalArgumentException("Напишите задачу");
@@ -35,19 +38,31 @@ public final class Agent implements Net.Cancel {
         for(int i=0;i<profiles.length();i++)if(profiles.getJSONObject(i).getString("id").equals(settings.optString("activeProfile")))chosen=profiles.getJSONObject(i);
         if(chosen==null)throw new IllegalStateException("Добавьте подключение модели в настройках");
         if(chosen.optString("model").trim().isEmpty())throw new IllegalStateException("Укажите модель в настройках подключения");
-        cancel=false;running=true;run=new JSONObject().put("id",UUID.randomUUID().toString()).put("chatId",chatId).put("task",task).put("started",System.currentTimeMillis()).put("status","running").put("events",new JSONArray());
+        cancel=false;paused=false;guard=new RunGuard(settings.optInt("maxSteps",30),settings.optInt("maxSeconds",600),settings.optInt("maxTokens",60000),System.currentTimeMillis());lastScreen="";running=true;run=new JSONObject().put("id",UUID.randomUUID().toString()).put("chatId",chatId).put("task",task).put("started",System.currentTimeMillis()).put("status","running").put("events",new JSONArray());
         try{app.startForegroundService(new Intent(app,RunService.class));}catch(Exception e){running=false;throw e;}
         if(DeviceService.live!=null)DeviceService.live.showStop();
         JSONObject profile=chosen;worker.submit(()->execute(task,attachments,settings,profile));
     }
-    public void stop(){cancel=true;DeviceService s=DeviceService.live;if(s!=null)s.cancelApproval();MainActivity.cancelApproval();}
+    public void pause(boolean value){paused=value;}
+    public void stop(){cancel=true;paused=false;DeviceService s=DeviceService.live;if(s!=null)s.cancelApproval();MainActivity.cancelApproval();}
     private synchronized void event(String kind,String text) {
         try{run.getJSONArray("events").put(new JSONObject().put("kind",kind).put("text",redact(text)).put("time",System.currentTimeMillis()));}catch(Exception ignored){}
     }
     private String redact(String text){
         JSONObject s=app.vault.get();for(String group:new String[]{"profiles","services"}){JSONArray items=s.optJSONArray(group);if(items!=null)for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item!=null)for(String k:new String[]{"key","token"}){String secret=item.optString(k);if(!secret.trim().isEmpty())text=text.replace(secret,"[скрыто]");}}}return text;
     }
-    private void check() throws InterruptedException {if(cancel)throw new InterruptedException("Задача остановлена");}
+    private void check() throws Exception {
+        if(cancel)throw new InterruptedException("Задача остановлена");
+        while(paused&&!cancel){if(guard!=null)guard.check(System.currentTimeMillis());Thread.sleep(150);}
+        if(cancel)throw new InterruptedException("Задача остановлена");if(guard!=null)guard.check(System.currentTimeMillis());
+    }
+    private JSONObject model(JSONObject profile,JSONArray messages,JSONArray tools)throws Exception{
+        check();int estimated=RunGuard.estimate(messages);if(estimated>=guard.remaining())throw new RunGuard.Limit("Контекст запроса превышает оставшийся бюджет токенов. Начните новый чат или увеличьте бюджет.");
+        JSONObject p=new JSONObject(profile.toString()).put("outputLimit",Math.min(4096,guard.remaining()-estimated));
+        JSONObject answer=Models.complete(p,messages,tools,this);JSONObject usage=answer.optJSONObject("_usage");
+        int count=usage==null?estimated+Math.max(1,answer.toString().length()/3):usage.optInt("total_tokens",usage.optInt("input_tokens",usage.optInt("prompt_tokens"))+usage.optInt("output_tokens",usage.optInt("completion_tokens")));
+        guard.account(count);synchronized(this){run.put("tokens",guard.used()).put("tokenEstimated",usage==null).put("maxTokens",app.vault.get().optInt("maxTokens",60000));}return answer;
+    }
     private void execute(String task,JSONArray attachments,JSONObject settings,JSONObject profile) {
         String finalStatus="done";
         try{
@@ -74,7 +89,7 @@ public final class Agent implements Net.Cancel {
                         .put(new JSONObject().put("type","image_url").put("image_url",new JSONObject().put("url","data:image/jpeg;base64,"+shot)));messages.put(new JSONObject().put("role","user").put("content",vision));}
                 }
                 event("status","Модель обрабатывает задачу");
-                JSONObject answer=Models.complete(profile,messages,tools,this);check();
+                JSONObject answer=model(profile,messages,tools);check();
                 String text=answer.optString("content","");if(!text.trim().isEmpty()&&!"null".equals(text))event("assistant",text);
                 JSONArray calls=answer.optJSONArray("tool_calls");
                 if(chatOnly&&calls!=null&&calls.length()>0)throw new IllegalStateException("Модель запросила инструменты в режиме чата. Действия не выполнены.");
@@ -84,12 +99,14 @@ public final class Agent implements Net.Cancel {
                     check();JSONObject call=calls.getJSONObject(i),f=call.getJSONObject("function");String name=f.getString("name"),result;
                     JSONObject args=new JSONObject(f.getString("arguments"));
                     event("action",describe(name,args));
-                    try{result=tool(name,args,settings);}catch(InterruptedException e){throw e;}catch(Exception e){result="Ошибка: "+e.getMessage();event("notice",result);}
+                    try{String blocked=guard.action(name,args);result=blocked==null?tool(name,args,settings):blocked;}catch(InterruptedException e){throw e;}catch(Exception e){result="Ошибка: "+e.getMessage();event("notice",result);}
+                    event("result",result.length()>12000?result.substring(0,12000)+"\n[сокращено]":result);
                     check();messages.put(new JSONObject().put("role","tool").put("tool_call_id",call.getString("id")).put("content",redact(result)));
                 }
                 if(step==limit-1){event("notice","Достигнут лимит "+limit+" шагов. Можно задать следующую задачу.");finalStatus="limit";}
             }
-        }catch(InterruptedException e){finalStatus="stopped";event("notice","Задача остановлена");}
+        }catch(RunGuard.Limit e){finalStatus="limit";event("notice",e.getMessage());}
+        catch(InterruptedException e){finalStatus="stopped";event("notice","Задача остановлена");}
         catch(Exception e){finalStatus=cancel?"stopped":"error";event("notice",cancel?"Задача остановлена":String.valueOf(e.getMessage()));}
         finally{
             synchronized(this){try{
@@ -121,9 +138,16 @@ public final class Agent implements Net.Cancel {
         if("device".equals(name)){
             if("list_apps".equals(a.optString("action")))return MainActivity.apps(app,false).toString();
             DeviceService s=DeviceService.live;if(s==null)throw new IllegalStateException("Включите службу W Agent в специальных возможностях Android");
-            String result=s.execute(a);check();
-            if(!Arrays.asList("read_screen","wait").contains(a.optString("action"))){Thread.sleep(650);return result+"\nТекущий экран:\n"+s.screen();}
-            return result;
+            String before=lastScreen;String result=s.execute(a);check();
+            if("read_screen".equals(a.optString("action"))){lastScreen=result;return result;}
+            if(!"wait".equals(a.optString("action"))){
+                Thread.sleep(650);lastScreen=s.screen();boolean changed=!before.isEmpty()&&!before.equals(lastScreen);
+                JSONObject screen=new JSONObject(lastScreen);String expected=a.optString("expected_text"),expectedPackage=a.optString("expected_package");
+                boolean matches=(expected.isEmpty()||lastScreen.toLowerCase(Locale.ROOT).contains(expected.toLowerCase(Locale.ROOT)))&&(expectedPackage.isEmpty()||expectedPackage.equals(screen.optString("package")));
+                if(changed&&matches)guard.progress();
+                String verification=!matches?"Ожидаемый результат не обнаружен. Прочитай экран и выбери другой способ.":changed?"Экран изменился; сверь элементы с целью шага.":"Экран не изменился. Действие не подтверждено; попробуй другой способ после чтения экрана.";
+                event("verification",verification);return result+"\nПроверка: "+verification+"\nТекущий экран:\n"+lastScreen;
+            }return result;
         }
         if("service".equals(name)){
             JSONArray services=settings.getJSONArray("services");JSONObject target=null;
@@ -153,11 +177,11 @@ public final class Agent implements Net.Cancel {
     }
     private JSONArray tools() throws Exception {
         JSONObject device=new JSONObject().put("action",new JSONObject().put("type","string").put("enum",new JSONArray(Arrays.asList("read_screen","list_apps","open_app","open_url","tap","swipe","input_text","press","scroll","wait"))));
-        for(String p:new String[]{"package","url","text","key","direction"})device.put(p,new JSONObject().put("type","string"));
+        for(String p:new String[]{"package","url","text","key","direction","expected_text","expected_package"})device.put(p,new JSONObject().put("type","string"));
         for(String p:new String[]{"id","x","y","x2","y2","ms"})device.put(p,new JSONObject().put("type","integer"));
         JSONObject service=new JSONObject();for(String p:new String[]{"connection","method","path","body","operation","params_json"})service.put(p,new JSONObject().put("type","string"));
         JSONObject files=new JSONObject();for(String p:new String[]{"action","folder","path","name","content","toFolder","toPath"})files.put(p,new JSONObject().put("type","string"));files.put("overwrite",new JSONObject().put("type","boolean"));
-        return new JSONArray().put(function("device","Управление телефоном. Сначала read_screen или list_apps. tap: id ИЛИ x,y. input_text: id,text. swipe: x,y,x2,y2,ms. press: key=home/back/recents/notifications/enter. scroll: id,direction=forward/backward. open_app: package. open_url: url, опционально package. wait: ms.",device,new JSONArray().put("action")))
+        return new JSONArray().put(function("device","Управление телефоном. Для действия укажи expected_text или expected_package — ожидаемый результат. Сначала read_screen или list_apps. tap: id ИЛИ x,y. input_text: id,text. swipe: x,y,x2,y2,ms. press: key=home/back/recents/notifications/enter. scroll: id,direction=forward/backward. open_app: package. open_url: url, опционально package. wait: ms.",device,new JSONArray().put("action")))
             .put(function("files","Файлы в выбранных пользователем папках. action: folders; list/read: folder,path; write: folder,path,content,overwrite; mkdir: folder,path; rename: folder,path,name; delete: folder,path; copy/move: folder,path,toFolder,toPath (папка назначения). output: name,content — создать файл результата в чате. attach: folder,path — выдать существующий файл. Путь всегда относительный.",files,new JSONArray().put("action")))
             .put(function("service","Вызов подключённого API или MCP по connection=id. HTTP: method, path относительный, body строка JSON. MCP: operation=tools/list|tools/call|resources/list|resources/read|prompts/list|prompts/get, params_json=строка JSON. Сначала получи список инструментов MCP, затем вызывай. Действия с изменениями требуют подтверждения.",service,new JSONArray().put("connection")));
     }

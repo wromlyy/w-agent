@@ -22,8 +22,8 @@ public final class Models {
             if(textOnly)message.put("content",text.toString());
         }
         JSONObject request=new JSONObject().put("model",model).put("messages",compatibleMessages);
-        for(int i=0;i<compatibleMessages.length();i++){compatibleMessages.getJSONObject(i).remove("_responseItems");compatibleMessages.getJSONObject(i).remove("_anthropicContent");}
-        applyReasoning(p,request);
+        for(int i=0;i<compatibleMessages.length();i++){compatibleMessages.getJSONObject(i).remove("_usage");compatibleMessages.getJSONObject(i).remove("_responseItems");compatibleMessages.getJSONObject(i).remove("_anthropicContent");}
+        applyReasoning(p,request);if(p.has("outputLimit"))request.put("max_completion_tokens",p.getInt("outputLimit"));
         if(tools.length()>0)request.put("tools",tools).put("parallel_tool_calls",false);
         if(p.optBoolean("freeOnly")) {
             if(!"https://openrouter.ai/api/v1".equals(base.replaceAll("/+$","")))throw new IllegalArgumentException("Бесплатное подключение использует OpenRouter");
@@ -35,7 +35,7 @@ public final class Models {
         JSONObject response=Net.request("POST",Net.join(base,"chat/completions"),Net.bearer(key),request.toString(),cancel).json();
         JSONArray choices=response.optJSONArray("choices");
         if(choices==null||choices.length()==0)throw new IllegalStateException("Сервер не вернул ответ chat/completions. Проверьте протокол подключения.");
-        return choices.getJSONObject(0).getJSONObject("message");
+        return choices.getJSONObject(0).getJSONObject("message").put("_usage",response.optJSONObject("usage"));
     }
     public static JSONArray freeModels(Net.Cancel cancel) throws Exception {
         JSONObject response=Net.request("GET","https://openrouter.ai/api/v1/models",null,null,cancel).json();
@@ -95,6 +95,7 @@ public final class Models {
             else input.put(new JSONObject().put("role",role).put("content",raw instanceof String?raw:""));
         }
         JSONObject req=new JSONObject().put("model",p.getString("model")).put("input",input).put("store",false).put("include",new JSONArray().put("reasoning.encrypted_content"));
+        if(p.has("outputLimit"))req.put("max_output_tokens",p.getInt("outputLimit"));
         if(definitions.length()>0)req.put("tools",definitions).put("parallel_tool_calls",false);
         String effort=effort(p),mode=p.optString("thinking","auto");if(!"auto".equals(effort)||!"auto".equals(mode)){JSONObject reasoning=new JSONObject();if("off".equals(mode))reasoning.put("effort","none");else if(!"auto".equals(effort))reasoning.put("effort",effort);else reasoning.put("effort","medium");req.put("reasoning",reasoning);}
         JSONObject r=Net.request("POST",Net.join(p.getString("base"),"responses"),Net.bearer(p.optString("key")),req.toString(),cancel).json();
@@ -103,7 +104,7 @@ public final class Models {
         for(int i=0;i<output.length();i++){JSONObject item=output.getJSONObject(i);if("function_call".equals(item.optString("type")))calls.put(call(item.getString("call_id"),item.getString("name"),new JSONObject(item.getString("arguments"))));
             JSONArray content=item.optJSONArray("content");if(content!=null)for(int j=0;j<content.length();j++){JSONObject part=content.getJSONObject(j);if("output_text".equals(part.optString("type")))text.append(part.optString("text"));}
         }
-        return new JSONObject().put("role","assistant").put("content",text.toString()).put("tool_calls",calls).put("_responseItems",output);
+        return new JSONObject().put("role","assistant").put("content",text.toString()).put("tool_calls",calls).put("_responseItems",output).put("_usage",r.optJSONObject("usage"));
     }
     private static JSONObject anthropic(JSONObject profile,String base,String key,String model,JSONArray messages,JSONArray tools,Net.Cancel cancel) throws Exception {
         JSONArray ms=new JSONArray(),ts=new JSONArray();StringBuilder system=new StringBuilder();
@@ -128,11 +129,12 @@ public final class Models {
         Map<String,String> h=new HashMap<>();h.put("x-api-key",key);h.put("anthropic-version","2023-06-01");
         JSONObject request=new JSONObject().put("model",model).put("max_tokens",4096).put("system",system.toString()).put("messages",ms);
         String mode=profile.optString("thinking","auto");if("off".equals(mode))request.put("thinking",new JSONObject().put("type","disabled"));else if("on".equals(mode)||!"auto".equals(effort(profile))){int budget=thinkingBudget(profile);request.put("thinking",new JSONObject().put("type","enabled").put("budget_tokens",budget)).put("max_tokens",budget+4096);}
+        if(profile.has("outputLimit")){int cap=profile.getInt("outputLimit");JSONObject thinking=request.optJSONObject("thinking");if(thinking!=null&&"enabled".equals(thinking.optString("type"))&&thinking.optInt("budget_tokens")>=cap)throw new IllegalArgumentException("Бюджет задачи меньше бюджета размышлений Anthropic. Увеличьте лимит токенов или выберите Авто.");request.put("max_tokens",Math.min(request.getInt("max_tokens"),cap));}
         if(ts.length()>0)request.put("tools",ts);
         JSONObject r=Net.request("POST",Net.join(base,"messages"),h,request.toString(),cancel).json();
         JSONArray calls=new JSONArray(),content=r.getJSONArray("content");StringBuilder text=new StringBuilder();
         for(int i=0;i<content.length();i++){JSONObject b=content.getJSONObject(i);if("text".equals(b.optString("type")))text.append(b.optString("text"));if("tool_use".equals(b.optString("type")))calls.put(call(b.getString("id"),b.getString("name"),b.getJSONObject("input")));}
-        return new JSONObject().put("role","assistant").put("content",text.toString()).put("tool_calls",calls).put("_anthropicContent",content);
+        return new JSONObject().put("role","assistant").put("content",text.toString()).put("tool_calls",calls).put("_anthropicContent",content).put("_usage",r.optJSONObject("usage"));
     }
     private static JSONObject source(String uri) throws Exception {
         int split=uri.indexOf(',');if(split<0||!uri.startsWith("data:"))throw new IllegalArgumentException("Неподдерживаемый формат вложения");

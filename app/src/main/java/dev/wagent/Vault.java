@@ -51,7 +51,7 @@ public final class Vault {
     }
     public synchronized void updateSettings(JSONObject settings) throws Exception {
         JSONObject next = get();
-        for (String k : new String[]{"profiles", "services", "skills", "activeProfile", "vision", "theme", "maxSteps"}) if (settings.has(k)) next.put(k, settings.get(k));
+        for (String k : new String[]{"profiles", "services", "skills", "activeProfile", "vision", "theme", "maxSteps", "maxSeconds", "maxTokens", "doubleCheck", "teamMode", "agentMode"}) if (settings.has(k)) next.put(k, settings.get(k));
         save(next);
     }
     public synchronized void history(JSONObject entry) throws Exception {
