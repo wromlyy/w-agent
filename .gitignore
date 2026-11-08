@@ -1,0 +1,15 @@
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
+*.apk
+.idea/
+.DS_Store
+*.log
+secrets*
+tools/sdk/
+tools/check/
+tools/classes/
+.private/
+node_modules/

@@ -1,0 +1,13 @@
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F5F4F0</item>
+        <item name="android:navigationBarColor">#F5F4F0</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">#42664C</item>
+        <item name="android:windowBackground">#F5F4F0</item>
+    </style>
+    <string name="accessibility_description">W Agent читает элементы открытого экрана и по вашей задаче нажимает кнопки, вводит текст и выполняет жесты. Данные экрана отправляются выбранному вами поставщику модели только во время запущенной задачи. Остановить задачу можно кнопкой W на экране или в уведомлении.</string>
+</resources>
