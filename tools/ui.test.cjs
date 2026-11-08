@@ -30,6 +30,7 @@ async function boot(seed={}){
    case 'stop':run={...run,running:false,status:'stopped'};result=true;break;
    case 'pick':result=[{id:'file1',name:'<img src=x>.md',mime:'text/markdown',text:'# File',size:7}];break;
    case 'testService':result='{}';break;
+   case 'workspaceConnect':settings.folders=[{id:'linux-workspace',name:'Linux workspace'}];result=settings.folders[0];break;
    case 'folderPick':settings.folders=[{id:'folder-1',name:'Documents',uri:'content://test/tree'}];result=settings.folders[0];break;
    case 'fileList':result=[{name:'notes.txt',path:'notes.txt',directory:false,size:12}];break;
    case 'fileAttach':result={id:'attachment-1',name:'notes.txt',mime:'text/plain',size:12,text:'device file'};break;
@@ -173,4 +174,8 @@ test('Android share target prepares a draft and photo attachment without startin
  const a=await boot({shared:{text:'Опиши фото',files:[photo]}});try{
   await pause();assert.equal(a.w.document.querySelector('#prompt').value,'Опиши фото');assert.ok(a.w.document.querySelector('.attachment-thumb'));assert.equal(a.calls.some(c=>c.op==='run'),false);
  }finally{a.dom.window.close();}
+});
+
+test('Linux workspace opens in the same file browser and code editor',async()=>{
+ const a=await boot();try{await a.click('nav [data-page=files]');await a.click('[data-action=workspaceConnect]');assert.ok(a.calls.some(c=>c.op==='workspaceConnect'));assert.ok(a.calls.some(c=>c.op==='fileList'&&c.args.folder==='linux-workspace'));await a.click('[data-action=fileMenu]');await a.click('[data-action=codeOpen]');assert.ok(a.w.document.querySelector('#code-editor'));assert.ok(a.calls.some(c=>c.op==='projectRead'&&c.args.folder==='linux-workspace'));}finally{a.dom.window.close();}
 });

@@ -12,6 +12,7 @@
         <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="https" /></intent>
     </queries>
     <application android:extractNativeLibs="true" android:name=".WApp" android:label="W Agent" android:theme="@style/AppTheme" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false" android:supportsRtl="true">
+        <provider android:name=".WorkspaceDocumentsProvider" android:authorities="dev.wagent.workspace" android:permission="android.permission.MANAGE_DOCUMENTS" android:exported="true" android:grantUriPermissions="true"><intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter></provider>
         <provider android:name=".OutputProvider" android:authorities="dev.wagent.files" android:exported="false" android:grantUriPermissions="true" />
         <activity android:name=".MainActivity" android:launchMode="singleTop" android:exported="true" android:windowSoftInputMode="adjustResize">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>

@@ -164,6 +164,7 @@ async function handle(action,el){
   case 'saveOutput':if(await native('fileSave',{id:el.dataset.id})===true)toast('Файл сохранён');break;
   case 'shareOutput':await native('fileShare',{id:el.dataset.id});break;
   case 'reasonMenu':reasoningDialog();break;
+  case 'workspaceConnect':{const folder=await native('workspaceConnect');await reloadSettings();folderId=folder.id;folderPath='';await renderFiles();break;}
   case 'folderPick':await native('folderPick');await reloadSettings();renderFiles();break;
   case 'openFolder':folderId=el.dataset.id;folderPath='';renderFiles();break;
   case 'browseFolder':folderPath=el.dataset.path;renderFiles();break;
@@ -265,7 +266,7 @@ function reasoningDialog(){const p=active();if(!p){profileEditor();return;}modal
 async function reloadSettings(){const state=await native('init');settings={...settings,...state.settings};device=state.device||device;return state;}
 async function renderFiles(){
  const main=$('#main');
- if(!folderId){main.innerHTML=title('Файлы','folderPick','Подключить папку')+`<p class="subhead">Подключите папку, с которой агент сможет работать.</p><div class="section-label">Папки устройства</div>`;
+ if(!folderId){main.innerHTML=title('Файлы','folderPick','Подключить папку')+`<p class="subhead">Подключите папку, с которой агент сможет работать.</p>${button('workspaceConnect',icon('code')+' Linux workspace','secondary full')}<div class="section-label">Папки устройства</div>`;
   const folders=settings.folders||[];main.innerHTML+=folders.length?`<div class="panel">${folders.map(f=>`<button class="row" data-action="openFolder" data-id="${esc(f.id)}"><span class="row-icon">${icon('folder')}</span><span class="row-text"><strong>${esc(f.name)}</strong><small>Выбрана через Android</small></span>${icon('right')}</button>`).join('')}</div>`:empty('folder','Выберите папку','Android даст доступ только к выбранной папке и её содержимому.','folderPick','Подключить папку');
   const outputs=settings.outputs||[];main.innerHTML+=`<div class="section-label">Файлы от агента · ${outputs.length}</div>`+(outputs.length?`<div class="output-list">${[...outputs].reverse().map(outputCard).join('')}</div>`:'<p class="subhead">Созданные файлы появятся здесь и в чате.</p>');return;
  }

@@ -139,6 +139,7 @@ public class MainActivity extends Activity {
                         String outputId=args.getString("id");JSONObject file=new FilesStore(app()).outputInfo(outputId);String callback=id;
                         handler.post(()->{if(pickerId!=null){reply(callback,null,"Выбор файла уже открыт");return;}pickerId=callback;pickerMode="saveOutput";saveOutputId=outputId;startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType(file.optString("mime","text/plain")).addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,file.optString("name","file.txt")),51);});return;
                     }
+                    case "workspaceConnect":result=new FilesStore(app()).addFolder(DocumentsContract.buildTreeDocumentUri(WorkspaceDocumentsProvider.AUTHORITY,"root"));break;
                     case "folderPick":{String callback=id;handler.post(()->{if(pickerId!=null){reply(callback,null,"Выбор файла уже открыт");return;}pickerId=callback;pickerMode="folder";startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION),51);});return;}
                     case "scheduleAdd":result=ScheduledTask.schedule(app(),args.getString("task"),args.getLong("at"),args.optInt("interval"));break;
                     case "scheduleCancel":ScheduledTask.cancel(app(),args.getString("id"));result=true;break;
