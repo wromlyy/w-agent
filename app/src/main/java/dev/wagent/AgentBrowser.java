@@ -29,7 +29,7 @@ public final class AgentBrowser {
         browser.setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
                 Uri uri=request.getUrl();try{
-                    if(!"https".equals(uri.getScheme())||uri.getUserInfo()!=null)return denied();
+                    if(!"https".equals(uri.getScheme())||uri.getUserInfo()!=null||(uri.getPort()!=-1&&uri.getPort()!=443))return denied();
                     if(PREVIEW.equals(uri.getHost())){
                         String relative=uri.getPath();if(relative==null)throw new IOException();relative=relative.replaceFirst("^/","");if(relative.isEmpty())relative="index.html";relative=FilesStore.cleanPath(relative);
                         File root=app.shell.root(),file=new File(root,relative).getCanonicalFile();if(!file.getPath().startsWith(root.getPath()+File.separator)||!file.isFile())return denied();
