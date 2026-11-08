@@ -90,6 +90,7 @@ public class MainActivity extends Activity {
                         if(!approve("Применить diff?",change.getString("preview")))throw new IllegalStateException("Изменение отклонено");result=project.apply(change);break;
                     }
                     case "checkpointRollback":if(!approve("Откатить файл?","Восстановить содержимое до выбранной правки?"))throw new IllegalStateException("Откат отклонён");result=new Project(app()).rollback(args.getString("id"));break;
+                    case "memoryDelete":{synchronized(app().vault){JSONArray a=app().vault.get().optJSONArray("memories");if(a!=null)for(int n=0;n<a.length();n++)if(args.getString("id").equals(a.getJSONObject(n).optString("id"))){a.remove(n);break;}app().vault.patch("memories",a==null?new JSONArray():a);}result=true;break;}
                     case "terminalList":result=app().shell.list();break;
                     case "terminalKill":app().shell.kill(args.getString("id"));result=true;break;
                     case "terminalRun":{
