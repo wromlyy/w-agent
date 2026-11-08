@@ -113,7 +113,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan -memory 2048 -cores 2
+          emulator-options: -no-window -gpu swiftshader -no-snapshot -noaudio -no-boot-anim -feature -Vulkan -memory 2048 -cores 2
           script: sh tools/android-smoke.sh
       - name: Collect runner diagnostics
         if: always()
@@ -121,6 +121,7 @@ jobs:
           mkdir -p smoke-results
           free -m > smoke-results/runner-memory.txt
           sudo dmesg -T | tail -150 > smoke-results/runner-kernel.txt
+          cp -R /tmp/android-runner/emu-crash-* smoke-results/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
