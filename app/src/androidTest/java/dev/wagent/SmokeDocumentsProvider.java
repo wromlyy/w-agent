@@ -7,7 +7,7 @@ import java.io.*;
 /** Disposable CI-only document provider. Never packaged in W Agent's release APK. */
 public class SmokeDocumentsProvider extends DocumentsProvider {
     private File root(){File f=new File(getContext().getFilesDir(),"project-smoke");f.mkdirs();return f;}
-    private File file(String id)throws FileNotFoundException{try{return id.equals("root")?root():new File(root(),FilesStore.cleanPath(id));}catch(IOException e){throw new FileNotFoundException();}}
+    private File file(String id)throws FileNotFoundException{if(id.startsWith("/")||id.contains("..")||id.contains("\\"))throw new FileNotFoundException();return id.equals("root")?root():new File(root(),id);}
     private String id(File f){return f.equals(root())?"root":f.getAbsolutePath().substring(root().getAbsolutePath().length()+1);}
     @Override public boolean onCreate(){return true;}
     @Override public Cursor queryRoots(String[] projection){MatrixCursor c=new MatrixCursor(new String[]{DocumentsContract.Root.COLUMN_ROOT_ID,DocumentsContract.Root.COLUMN_DOCUMENT_ID,DocumentsContract.Root.COLUMN_TITLE});c.addRow(new Object[]{"smoke","root","Smoke project"});return c;}

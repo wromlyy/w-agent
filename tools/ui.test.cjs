@@ -13,6 +13,10 @@ async function boot(seed={}){
  w.WNative={post(raw){const req=JSON.parse(raw);calls.push(req);queueMicrotask(()=>{
   let result;
   switch(req.op){
+   case 'shared':result=seed.shared||{files:[],text:''};seed.shared=null;break;
+   case 'terminalList':result=[];break;
+   case 'projectRead':result='const value = 1;\n';break;
+   case 'projectWrite':result={verified:true,checkpoint:'c1'};break;
    case 'init':result={settings,run,accessibility:true};break;
    case 'state':result={run,accessibility:true};break;
    case 'save':settings=JSON.parse(JSON.stringify(req.args));result=true;break;
@@ -34,6 +38,7 @@ async function boot(seed={}){
   }
   w.nativeReply(req.id,JSON.parse(JSON.stringify(result)),null);
  });}};
+ for(const file of ['marked.js','purify.js','highlight.js'])w.eval(fs.readFileSync('app/src/main/assets/vendor/'+file,'utf8'));
  w.eval(script);await pause();
  return {w,dom,calls,get settings(){return settings;},async click(selector){const e=w.document.querySelector(selector);assert.ok(e,selector);e.click();await pause();},set(name,value){w.document.querySelector(`[name=${name}]`).value=value;},async submit(){w.document.querySelector('#editor').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await pause();}};
 }
@@ -112,7 +117,7 @@ test('continuous chat keeps previous messages and copies exact assistant text',a
  const two={id:'turn2',chatId:'chat1',task:'Second task',status:'done',running:false,events:[{kind:'assistant',text:'Second reply'}]};
  const a=await boot({settings:{history:[one,two]},run:two});try{
   assert.equal(a.w.document.querySelectorAll('.chat-turn').length,2);
-  assert.equal(a.w.document.querySelector('.message-text').textContent,'First reply\nwith code <example>');
+  assert.match(a.w.document.querySelector('.message-text').textContent,/First reply/);assert.match(a.w.document.querySelector('.message-text').textContent,/with code <example>/);
   await a.click('[data-action=copyMessage][data-run=turn1]');assert.equal(a.calls.find(c=>c.op==='copyText').args.text,one.events[0].text);
   await a.click('[data-action=saveMessage][data-run=turn2]');assert.equal(a.calls.find(c=>c.op==='fileOutput').args.content,'Second reply');
   assert.ok(a.w.document.querySelector('[data-action=saveOutput]'));assert.ok(a.w.document.querySelector('[data-action=shareOutput]'));
@@ -131,5 +136,41 @@ test('device folder selection and browsing attach the selected file to the chat'
   await a.click('[data-action=fileMenu]');await a.click('[data-action=attachDeviceFile]');
   assert.equal(a.calls.find(c=>c.op==='fileAttach').args.folder,'folder-1');assert.equal(a.calls.find(c=>c.op==='fileAttach').args.path,'notes.txt');
   assert.equal(a.w.document.querySelector('.file-chip span').textContent,'notes.txt');
+ }finally{a.dom.window.close();}
+});
+test('mode switch is visible in composer and planning edits are sent to the native gate',async()=>{
+ const p={id:'p',name:'Model',model:'test',preset:'openrouter'};
+ const a=await boot({settings:{profiles:[p],activeProfile:'p'}});try{
+  await a.click('[data-action=modeMenu]');await a.click('[data-action=setMode][data-id=chat]');assert.equal(a.settings.agentMode,'chat');assert.match(a.w.document.querySelector('.mode-chip').textContent,/Чат/);
+ }finally{a.dom.window.close();}
+ const b=await boot({settings:{profiles:[p],activeProfile:'p'},run:{id:'plan',chatId:'chat',task:'Do work',running:true,status:'awaiting_plan',plan:'Read then edit',events:[]}});try{
+  b.w.document.querySelector('#approved-plan').value='Read, test, then edit';await b.click('[data-action=approvePlan]');assert.equal(b.calls.find(c=>c.op==='planApprove').args.plan,'Read, test, then edit');
+ }finally{b.dom.window.close();}
+});
+test('Markdown sanitizes active content and copies source code blocks exactly',async()=>{
+ const text='| A | B |\n|---|---|\n| 1 | 2 |\n\n```js\nconst x = "<tag>";\n```\n\n<img src=x onerror="window.pwned=1">\n[bad](javascript:alert(1))';
+ const a=await boot({run:{id:'m',task:'Example',status:'done',events:[{kind:'assistant',text}]}});try{
+  assert.ok(a.w.document.querySelector('.message-text table'));assert.equal(a.w.document.querySelectorAll('.message-text img,.message-text script').length,0);assert.equal(a.w.pwned,undefined);assert.equal(a.w.document.querySelector('a')?.getAttribute('href'),null);
+  await a.click('[data-action=copyCode]');assert.equal(a.calls.find(c=>c.op==='copyText').args.text,'const x = "<tag>";\n');
+ }finally{a.dom.window.close();}
+});
+test('project editor keeps changes across tabs and submits the complete file for diff confirmation',async()=>{
+ const a=await boot({settings:{folders:[{id:'f',name:'Project'}]}});try{
+  await a.click('[data-page=files]');await a.click('[data-action=openFolder]');await pause();await a.click('[data-action=fileMenu]');await a.click('[data-action=codeOpen]');
+  const editor=a.w.document.querySelector('#code-editor');editor.value='const value = 2;\n';editor.dispatchEvent(new a.w.Event('input',{bubbles:true}));await a.click('[data-action=codeSave]');
+  assert.equal(a.calls.find(c=>c.op==='projectWrite').args.content,'const value = 2;\n');assert.equal(a.calls.find(c=>c.op==='projectWrite').args.folder,'f');
+ }finally{a.dom.window.close();}
+});
+test('role selection persists and sidebar reaches the real terminal view',async()=>{
+ const roles=[{id:'general',name:'General',tools:['files'],prompt:'Help',effort:'auto'},{id:'reviewer',name:'Reviewer',tools:['project'],prompt:'Read only',readOnly:true,trust:'read_auto',effort:'high'}];
+ const a=await boot({settings:{roles}});try{
+  await a.click('[data-action=roleMenu]');await a.click('[data-action=roleSelect][data-id=reviewer]');assert.equal(a.settings.activeRole,'reviewer');assert.match(a.w.document.querySelector('.role-chip').textContent,/Reviewer/);
+  await a.click('[data-action=menu]');await a.click('.drawer-links [data-page=terminal]');assert.ok(a.w.document.querySelector('#terminal-command'));assert.ok(a.calls.some(c=>c.op==='terminalList'));
+ }finally{a.dom.window.close();}
+});
+test('Android share target prepares a draft and photo attachment without starting an agent',async()=>{
+ const photo={id:'photo',name:'photo.jpg',mime:'image/jpeg',data:'dGVzdA==',size:4};
+ const a=await boot({shared:{text:'Опиши фото',files:[photo]}});try{
+  await pause();assert.equal(a.w.document.querySelector('#prompt').value,'Опиши фото');assert.ok(a.w.document.querySelector('.attachment-thumb'));assert.equal(a.calls.some(c=>c.op==='run'),false);
  }finally{a.dom.window.close();}
 });
