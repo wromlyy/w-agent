@@ -20,6 +20,8 @@ public final class DeviceSmokeInstrumentation extends Instrumentation {
         Bundle result=new Bundle();UiAutomation automation=null;
         try{
             automation=getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
+            require(new File(getTargetContext().getFilesDir(),"upgrade-smoke").isFile(),"Upgrade lost private app files");
+            require((getTargetContext().getApplicationInfo().flags&android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)==0,"Published release remains debuggable");
             Activity activity=startActivitySync(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync();
             shell(automation,"settings put secure enabled_accessibility_services dev.wagent/dev.wagent.DeviceService");
@@ -66,7 +68,7 @@ public final class DeviceSmokeInstrumentation extends Instrumentation {
             shell(automation,"settings put secure enabled_accessibility_services dev.wagent/dev.wagent.DeviceService");
             deadline=SystemClock.uptimeMillis()+15000;while(DeviceService.live==null&&SystemClock.uptimeMillis()<deadline)Thread.sleep(200);
             require(DeviceService.live!=null,"Service did not reconnect after user-style toggle");
-            result.putString("stream","PASS: Android service connect/disconnect, screen tree, overlay, packaged UI, file provider, chat session, SAF diff and rollback, photo normalization, terminal output and timeout, embedded Linux, Python, Node, Git, SSH and compiled C executable, interactive PTY, terminal size and exit status, Linux workspace SAF roundtrip and symlink protection\n");finish(Activity.RESULT_OK,result);
+            result.putString("stream","PASS: Android service connect/disconnect, screen tree, overlay, packaged UI, file provider, chat session, SAF diff and rollback, photo normalization, terminal output and timeout, embedded Linux, Python, Node, Git, SSH and compiled C executable, interactive PTY, terminal size and exit status, Linux workspace SAF roundtrip and symlink protection, signed upgrade from 0.2 with private files retained\n");finish(Activity.RESULT_OK,result);
         }catch(Throwable error){StringWriter stack=new StringWriter();error.printStackTrace(new PrintWriter(stack));result.putString("stream","FAIL: "+stack);finish(Activity.RESULT_CANCELED,result);}
     }
 }
