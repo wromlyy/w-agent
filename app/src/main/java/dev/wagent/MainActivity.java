@@ -52,7 +52,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onResume(){super.onResume();foreground=new java.lang.ref.WeakReference<>(this);if(web!=null)web.onResume();}
     private void applyTheme(){runOnUiThread(()->{
-        boolean dark="dark".equals(app().vault.get().optString("theme"));int background=dark?Color.rgb(23,27,24):Color.rgb(245,244,240);
+        boolean dark="dark".equals(app().vault.get().optString("theme"));int background=dark?(app().vault.get().optBoolean("amoled")?Color.BLACK:Color.rgb(17,24,39)):Color.WHITE;
         getWindow().setStatusBarColor(background);getWindow().setNavigationBarColor(background);if(web!=null)web.setBackgroundColor(background);
         getWindow().getDecorView().setBackgroundColor(background);
         if(Build.VERSION.SDK_INT>=30){WindowInsetsController c=getWindow().getInsetsController();if(c!=null)c.setSystemBarsAppearance(dark?0:WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);}else{int flags=getWindow().getDecorView().getSystemUiVisibility();int mask=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;getWindow().getDecorView().setSystemUiVisibility(dark?flags&~mask:flags|mask);}
@@ -77,7 +77,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void post(String raw){
             io.execute(()->{String id="";try{JSONObject req=new JSONObject(raw);id=req.getString("id");String op=req.getString("op");JSONObject args=req.optJSONObject("args");if(args==null)args=new JSONObject();Object result=null;
                 switch(op){
-                    case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");if(!visible.has("roles"))visible.put("roles",Roles.presets());result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("device",DeviceStatus.get(MainActivity.this)).put("run",app().agent.state()).put("version","0.2.0");break;}
+                    case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");if(Build.VERSION.SDK_INT>=31)visible.put("systemAccent",String.format("#%06X",getColor(android.R.color.system_accent1_600)&0xffffff));if(!visible.has("roles"))visible.put("roles",Roles.presets());result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("device",DeviceStatus.get(MainActivity.this)).put("run",app().agent.state()).put("version","0.2.0");break;}
                     case "state":result=new JSONObject().put("run",app().agent.state()).put("device",DeviceStatus.get(MainActivity.this)).put("accessibility",DeviceService.live!=null);break;
                     case "reconnect":handler.post(()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));result=true;break;
                     case "deviceTest":{
