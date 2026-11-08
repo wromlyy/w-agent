@@ -66,6 +66,7 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
   android14:
+    timeout-minutes: 12
     needs: apk
     runs-on: ubuntu-latest
     steps:
