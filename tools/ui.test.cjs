@@ -1,0 +1,72 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const {JSDOM}=require('jsdom');
+const html=fs.readFileSync('app/src/main/assets/index.html','utf8');
+const script=fs.readFileSync('app/src/main/assets/app.js','utf8');
+const pause=()=>new Promise(r=>setImmediate(r));
+
+async function boot(){
+ const dom=new JSDOM(html,{url:'https://app.wagent.local/',runScripts:'outside-only'});
+ const w=dom.window,calls=[];
+ let settings={profiles:[],services:[],skills:[],history:[],activeProfile:'',theme:'light',vision:false,maxSteps:30},run={};
+ w.WNative={post(raw){const req=JSON.parse(raw);calls.push(req);queueMicrotask(()=>{
+  let result;
+  switch(req.op){
+   case 'init':result={settings,run,accessibility:true};break;
+   case 'state':result={run,accessibility:true};break;
+   case 'save':settings=JSON.parse(JSON.stringify(req.args));result=true;break;
+   case 'models':result=['kimi-k2','deepseek-chat','qwen3-test'];break;
+   case 'apps':result=[{name:'YouTube',package:'com.google.android.youtube'},{name:'TikTok',package:'com.zhiliaoapp.musically'}];break;
+   case 'run':run={task:req.args.task,running:true,status:'running',events:[],step:1,maxSteps:30};result=true;break;
+   case 'newChat':run={};result=true;break;
+   case 'stop':run={...run,running:false,status:'stopped'};result=true;break;
+   case 'pick':result=[{id:'file1',name:'<img src=x>.md',mime:'text/markdown',text:'# File',size:7}];break;
+   case 'testService':result='{}';break;
+   default:result=true;
+  }
+  w.nativeReply(req.id,JSON.parse(JSON.stringify(result)),null);
+ });}};
+ w.eval(script);await pause();
+ return {w,dom,calls,get settings(){return settings;},async click(selector){const e=w.document.querySelector(selector);assert.ok(e,selector);e.click();await pause();},set(name,value){w.document.querySelector(`[name=${name}]`).value=value;},async submit(){w.document.querySelector('#editor').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await pause();}};
+}
+test('provider setup, remote model catalog, activation and task stop',async()=>{
+ const a=await boot();try{
+  await a.click('[data-action=chooseModel]');
+  assert.ok(a.w.document.querySelector('[data-preset=kimi]'));
+  await a.click('[data-action=preset][data-preset=kimi]');
+  assert.equal(a.w.document.querySelector('[name=base]').value,'https://api.moonshot.ai/v1');
+  a.set('key','test-api-key');await a.click('[data-action=loadModels]');
+  assert.equal(a.w.document.querySelectorAll('[data-action=modelName]').length,3);
+  await a.click('[data-model="kimi-k2"]');await a.submit();
+  assert.equal(a.settings.profiles[0].model,'kimi-k2');
+  assert.equal(a.settings.profiles[0].preset,'kimi');
+  assert.equal(a.settings.activeProfile,a.settings.profiles[0].id);
+  const p=a.w.document.querySelector('#prompt');p.value='Открой YouTube';p.dispatchEvent(new a.w.Event('input',{bubbles:true}));
+  await a.click('[data-action=send]');assert.ok(a.w.document.querySelector('[data-action=stop]'));
+  assert.equal(a.calls.find(c=>c.op==='run').args.task,'Открой YouTube');
+  await a.click('[data-action=stop]');assert.ok(a.calls.some(c=>c.op==='stop'));
+ }finally{a.dom.window.close();}
+});
+test('skills, GitHub service, app selection and file content escaping',async()=>{
+ const a=await boot();try{
+  await a.click('[data-page=skills]');await a.click('[data-action=importSkill]');
+  assert.equal(a.w.document.querySelector('[name=content]').value,'# File');
+  a.set('name','Мой навык');await a.submit();assert.equal(a.settings.skills.length,1);
+  await a.click('[data-page=connections]');await a.click('[data-tab=services]');await a.click('[data-action=githubService]');
+  a.set('token','github-test-token');await a.submit();assert.equal(a.settings.services[0].url,'https://api.github.com');
+  assert.equal(a.settings.services[0].enabled,true);
+  await a.click('[data-page=apps]');await pause();await a.click('[data-id="com.google.android.youtube"]');
+  assert.match(a.w.document.querySelector('#prompt').value,/YouTube/);
+  await a.click('[data-action=attach]');assert.equal(a.w.document.querySelector('.file-chip span').textContent,'<img src=x>.md');
+  assert.equal(a.w.document.querySelectorAll('.file-chip img').length,0);
+  await a.click('[data-action=removeFile]');assert.equal(a.w.document.querySelectorAll('.file-chip').length,0);
+ }finally{a.dom.window.close();}
+});
+test('settings persist and profile validation rejects unsafe URLs',async()=>{
+ const a=await boot();try{
+  await a.click('[data-page=settings]');const toggle=a.w.document.querySelector('[data-setting=theme]');toggle.checked=true;toggle.dispatchEvent(new a.w.Event('change',{bubbles:true}));await pause();
+  assert.equal(a.settings.theme,'dark');assert.equal(a.w.document.documentElement.dataset.theme,'dark');
+  await a.click('[data-page=connections]');await a.click('[data-action=addProfile]');a.set('base','http://unsafe.example');a.set('model','model');await a.submit();assert.match(a.w.document.querySelector('#form-error').textContent,/https/);assert.equal(a.settings.profiles.length,0);
+ }finally{a.dom.window.close();}
+});

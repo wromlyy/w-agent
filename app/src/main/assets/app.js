@@ -95,7 +95,7 @@ async function handle(action,el){
   case 'appTask':{const a=appsCache.find(x=>x.package===el.dataset.id);draft=`Открой ${a.name} (${a.package}) и `;page='chat';viewingHistory=false;render();$('#prompt').focus();break;}
   case 'send':await startTask();break;
   case 'stop':await native('stop');toast('Останавливаю задачу');break;
-  case 'newChat':if(run.running){toast('Сначала остановите задачу');return;}run={};page='chat';viewingHistory=false;render();break;
+  case 'newChat':if(run.running){toast('Сначала остановите задачу');return;}await native('newChat');run={};page='chat';viewingHistory=false;render();break;
   case 'attach':{const added=await native('pick',{mode:'files'});if(files.length+added.length>6){toast('Максимум 6 файлов');return;}files.push(...added);renderComposer();break;}
   case 'removeFile':files=files.filter(f=>f.id!==el.dataset.id);renderComposer();break;
   case 'chooseModel':await chooseModel();break;
@@ -142,7 +142,7 @@ document.addEventListener('submit',e=>{if(e.target.id!=='editor')return;e.preven
  if(kind==='service'){if(!data.url.startsWith('https://'))throw Error('Укажите HTTPS-адрес');data.enabled=f.querySelector('[name=enabled]').checked;data.preset=f.dataset.preset;const i=settings.services.findIndex(s=>s.id===data.id);if(i<0)settings.services.push(data);else settings.services[i]=data;}
  if(kind==='skill'){if(!data.content.trim())throw Error('Добавьте инструкции');if(data.content.length>100000)throw Error('Навык слишком большой: максимум 100 000 символов');data.enabled=f.querySelector('[name=enabled]').checked;const i=settings.skills.findIndex(s=>s.id===data.id);if(i<0)settings.skills.push(data);else settings.skills[i]=data;}
  await save();closeModal();render();toast('Сохранено');})().catch(e=>{if($('#form-error'))$('#form-error').textContent=e.message;else toast(e.message);});});
-window.goBack=()=>{if($('#modal-root').innerHTML){closeModal();return;}if(page!=='chat'||viewingHistory){page='chat';viewingHistory=false;native('state').then(s=>{run=s.run;render();});return;}if(!run.running&&run.task){run={};render();}};
+window.goBack=()=>{if($('#modal-root').innerHTML){closeModal();return;}if(page!=='chat'||viewingHistory){page='chat';viewingHistory=false;native('state').then(s=>{run=s.run;render();});return;}if(!run.running&&run.task){native('newChat').then(()=>{run={};render();});}};
 let polling=false;
 async function poll(){if(polling)return;polling=true;try{const state=await native('state');accessibility=state.accessibility;const next=state.run,key=JSON.stringify(next);if(!viewingHistory&&key!==lastRunKey){lastRunKey=key;if(next.task){const wasRunning=run.running;run=next;if(page==='chat'){renderChat();renderComposer();}if(wasRunning&&!run.running)await refreshHistory();}}}catch(e){}finally{polling=false;}}
 async function init(){try{const s=await native('init');settings={...settings,...s.settings};settings.skills=settings.skills||[];accessibility=s.accessibility;run=s.run;lastRunKey=JSON.stringify(run);render();setInterval(poll,1200);}catch(e){$('#main').innerHTML=`<div class="empty">${icon('warning')}<h3>Не удалось открыть приложение</h3><p>${esc(e.message)}</p></div>`;}}

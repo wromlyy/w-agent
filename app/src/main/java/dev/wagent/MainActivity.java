@@ -64,6 +64,7 @@ public class MainActivity extends Activity {
                     case "save":app().vault.updateSettings(args);result=true;break;
                     case "run":app().agent.start(args.getString("task"),args.optJSONArray("files"));result=true;break;
                     case "stop":app().agent.stop();result=true;break;
+                    case "newChat":app().agent.newChat();result=true;break;
                     case "models":result=Models.models(args,()->false);break;
                     case "testService":result=Connections.execute(args,new JSONObject().put("method","GET").put("path","api.github.com".equals(Uri.parse(args.optString("url")).getHost())?"user":"").put("operation","tools/list"),()->false);break;
                     case "apps":result=apps(MainActivity.this,true);break;

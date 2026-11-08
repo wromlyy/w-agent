@@ -9,8 +9,10 @@ public final class Agent implements Net.Cancel {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private volatile boolean running=false,cancel=false;
     private JSONObject run=new JSONObject();
+    private final JSONArray conversation=new JSONArray();
     public Agent(WApp app){this.app=app;}
     public boolean running(){return running;}
+    public synchronized void newChat(){if(running)throw new IllegalStateException("Сначала остановите задачу");while(conversation.length()>0)conversation.remove(0);run=new JSONObject();}
     @Override public boolean cancelled(){return cancel;}
     public synchronized JSONObject state() throws Exception {return new JSONObject(run.toString()).put("running",running);}
     public synchronized void start(String task,JSONArray attachments) throws Exception {
@@ -38,6 +40,7 @@ public final class Agent implements Net.Cancel {
         try{
             JSONArray messages=new JSONArray();
             messages.put(new JSONObject().put("role","system").put("content",instructions(settings)));
+            synchronized(this){for(int i=0;i<conversation.length();i++)messages.put(new JSONObject(conversation.getJSONObject(i).toString()));}
             JSONArray content=new JSONArray().put(new JSONObject().put("type","text").put("text",task));
             if(attachments!=null)for(int i=0;i<attachments.length();i++){
                 JSONObject f=attachments.getJSONObject(i);String mime=f.optString("mime");
@@ -72,7 +75,15 @@ public final class Agent implements Net.Cancel {
         }catch(InterruptedException e){finalStatus="stopped";event("notice","Задача остановлена");}
         catch(Exception e){finalStatus=cancel?"stopped":"error";event("notice",cancel?"Задача остановлена":String.valueOf(e.getMessage()));}
         finally{
-            synchronized(this){try{run.put("status",finalStatus).put("finished",System.currentTimeMillis());app.vault.history(new JSONObject(run.toString()));}catch(Exception e){event("notice","Не удалось сохранить историю");}running=false;}
+            synchronized(this){try{
+                run.put("status",finalStatus).put("finished",System.currentTimeMillis());app.vault.history(new JSONObject(run.toString()));
+                conversation.put(new JSONObject().put("role","user").put("content",task));
+                JSONArray events=run.getJSONArray("events");StringBuilder summary=new StringBuilder();
+                for(int i=0;i<events.length();i++){JSONObject e=events.getJSONObject(i);if(!"status".equals(e.optString("kind")))summary.append(e.optString("text")).append('\n');}
+                String text=summary.toString();if(text.length()>7000)text=text.substring(text.length()-7000);
+                conversation.put(new JSONObject().put("role","assistant").put("content",text.isEmpty()?"Статус задачи: "+finalStatus:text));
+                while(conversation.length()>12)conversation.remove(0);
+            }catch(Exception e){event("notice","Не удалось сохранить историю");}running=false;}
             if(DeviceService.live!=null)DeviceService.live.hideStop();app.stopService(new Intent(app,RunService.class));
         }
     }
