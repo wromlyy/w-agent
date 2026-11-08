@@ -6,6 +6,12 @@ import java.util.*;
 
 /** Provider adapters share an internal OpenAI-style message/tool representation. */
 public final class Models {
+    private static final ThreadLocal<java.util.function.Consumer<String>> output=new ThreadLocal<>();
+    public static JSONObject complete(JSONObject p,JSONArray messages,JSONArray tools,Net.Cancel cancel,java.util.function.Consumer<String> sink)throws Exception{output.set(sink);try{return complete(p,messages,tools,cancel);}finally{output.remove();}}
+    private static JSONObject query(String url,Map<String,String> headers,JSONObject body,Net.Cancel cancel,String protocol)throws Exception{
+        ModelStream stream=null;if(output.get()!=null){body.put("stream",true);if("compatible".equals(protocol))body.put("stream_options",new JSONObject().put("include_usage",true));stream=new ModelStream(protocol,output.get());}
+        return Net.request("POST",url,headers,body.toString(),cancel,stream).json();
+    }
     public static JSONObject complete(JSONObject p,JSONArray messages,JSONArray tools,Net.Cancel cancel) throws Exception {
         String type=p.optString("type","compatible"),base=p.getString("base"),key=p.optString("key"),model=p.getString("model");
         if(model.trim().isEmpty())throw new IllegalArgumentException("Укажите модель в настройках подключения");
@@ -32,7 +38,7 @@ public final class Models {
             if(tools.length()>0&&!available.optBoolean("tools"))throw new IllegalStateException("Эта бесплатная модель подходит только для чата. Выберите режим Чат в подключении.");
             request.put("provider",new JSONObject().put("max_price",new JSONObject().put("prompt",0).put("completion",0).put("request",0).put("image",0)));
         }
-        JSONObject response=Net.request("POST",Net.join(base,"chat/completions"),Net.bearer(key),request.toString(),cancel).json();
+        JSONObject response=query(Net.join(base,"chat/completions"),Net.bearer(key),request,cancel,"compatible");
         JSONArray choices=response.optJSONArray("choices");
         if(choices==null||choices.length()==0)throw new IllegalStateException("Сервер не вернул ответ chat/completions. Проверьте протокол подключения.");
         return choices.getJSONObject(0).getJSONObject("message").put("_usage",response.optJSONObject("usage"));
@@ -98,7 +104,7 @@ public final class Models {
         if(p.has("outputLimit"))req.put("max_output_tokens",p.getInt("outputLimit"));
         if(definitions.length()>0)req.put("tools",definitions).put("parallel_tool_calls",false);
         String effort=effort(p),mode=p.optString("thinking","auto");if(!"auto".equals(effort)||!"auto".equals(mode)){JSONObject reasoning=new JSONObject();if("off".equals(mode))reasoning.put("effort","none");else if(!"auto".equals(effort))reasoning.put("effort",effort);else reasoning.put("effort","medium");req.put("reasoning",reasoning);}
-        JSONObject r=Net.request("POST",Net.join(p.getString("base"),"responses"),Net.bearer(p.optString("key")),req.toString(),cancel).json();
+        JSONObject r=query(Net.join(p.getString("base"),"responses"),Net.bearer(p.optString("key")),req,cancel,"responses");
         JSONArray output=r.optJSONArray("output");if(output==null)throw new IllegalStateException("Responses API не вернул output");
         JSONArray calls=new JSONArray();StringBuilder text=new StringBuilder();
         for(int i=0;i<output.length();i++){JSONObject item=output.getJSONObject(i);if("function_call".equals(item.optString("type")))calls.put(call(item.getString("call_id"),item.getString("name"),new JSONObject(item.getString("arguments"))));
@@ -131,7 +137,7 @@ public final class Models {
         String mode=profile.optString("thinking","auto");if("off".equals(mode))request.put("thinking",new JSONObject().put("type","disabled"));else if("on".equals(mode)||!"auto".equals(effort(profile))){int budget=thinkingBudget(profile);request.put("thinking",new JSONObject().put("type","enabled").put("budget_tokens",budget)).put("max_tokens",budget+4096);}
         if(profile.has("outputLimit")){int cap=profile.getInt("outputLimit");JSONObject thinking=request.optJSONObject("thinking");if(thinking!=null&&"enabled".equals(thinking.optString("type"))&&thinking.optInt("budget_tokens")>=cap)throw new IllegalArgumentException("Бюджет задачи меньше бюджета размышлений Anthropic. Увеличьте лимит токенов или выберите Авто.");request.put("max_tokens",Math.min(request.getInt("max_tokens"),cap));}
         if(ts.length()>0)request.put("tools",ts);
-        JSONObject r=Net.request("POST",Net.join(base,"messages"),h,request.toString(),cancel).json();
+        JSONObject r=query(Net.join(base,"messages"),h,request,cancel,"anthropic");
         JSONArray calls=new JSONArray(),content=r.getJSONArray("content");StringBuilder text=new StringBuilder();
         for(int i=0;i<content.length();i++){JSONObject b=content.getJSONObject(i);if("text".equals(b.optString("type")))text.append(b.optString("text"));if("tool_use".equals(b.optString("type")))calls.put(call(b.getString("id"),b.getString("name"),b.getJSONObject("input")));}
         return new JSONObject().put("role","assistant").put("content",text.toString()).put("tool_calls",calls).put("_anthropicContent",content).put("_usage",r.optJSONObject("usage"));

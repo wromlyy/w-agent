@@ -9,11 +9,14 @@ public final class Net {
     public interface Cancel { boolean cancelled(); }
     public static final class Reply { public int status; public String text; public String session; public JSONObject json() throws Exception { return new JSONObject(text); } }
     public static Reply request(String method, String url, Map<String,String> headers, String body, Cancel cancel) throws Exception {
+        return request(method,url,headers,body,cancel,null);
+    }
+    public static Reply request(String method,String url,Map<String,String> headers,String body,Cancel cancel,ModelStream sink)throws Exception{
         URI uri=URI.create(url);
         if(!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null) throw new IOException("Укажите HTTPS-адрес без логина и пароля");
         HttpURLConnection con=(HttpURLConnection)uri.toURL().openConnection();
         con.setRequestMethod(method); con.setConnectTimeout(15000); con.setReadTimeout(60000); con.setInstanceFollowRedirects(false);
-        con.setRequestProperty("Accept","application/json");
+        con.setRequestProperty("Accept",sink==null?"application/json":"text/event-stream");
         if(headers!=null) for(Map.Entry<String,String> h:headers.entrySet()) con.setRequestProperty(h.getKey(),h.getValue());
         Thread watcher=new Thread(()->{try{while(!Thread.currentThread().isInterrupted()){if(cancel!=null&&cancel.cancelled()){con.disconnect();return;}Thread.sleep(150);}}catch(InterruptedException ignored){}},"network-cancel");
         watcher.setDaemon(true); watcher.start();
@@ -28,12 +31,14 @@ public final class Net {
                 String line;StringBuilder event=new StringBuilder();int size=0;
                 while((line=reader.readLine())!=null){size+=line.length();if(size>4*1024*1024)throw new IOException("Ответ сервера больше 4 МБ");
                     if(line.isEmpty()){
+                        if(sink!=null){if(event.length()>0)sink.accept(event.toString());event.setLength(0);continue;}
                         try{JSONObject payload=new JSONObject(event.toString());if(payload.has("result")||payload.has("error")){bytes.write(payload.toString().getBytes(StandardCharsets.UTF_8));break;}}catch(JSONException ignored){}event.setLength(0);
-                    }else if(line.startsWith("data:"))event.append(line.substring(5).trim());
+                    }else if(line.startsWith("data:")){if(event.length()>0)event.append("\n");event.append(line.substring(5).trim());}
                 }
             }
             else if(stream!=null)try(InputStream in=stream){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(bytes.size()+n>4*1024*1024)throw new IOException("Ответ сервера больше 4 МБ");bytes.write(b,0,n);}}
             r.text=bytes.toString(StandardCharsets.UTF_8.name());
+            if(sink!=null&&sse&&r.status>=200&&r.status<300)r.text=sink.finish().toString();
             if(r.status<200||r.status>=300) {
                 String detail="";try {JSONObject e=new JSONObject(r.text).optJSONObject("error");if(e!=null)detail=e.optString("message","");}catch(Exception ignored){}
                 if(detail.length()>300)detail=detail.substring(0,300);

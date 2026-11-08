@@ -66,7 +66,9 @@ public final class Agent implements Net.Cancel {
     private JSONObject model(JSONObject profile,JSONArray messages,JSONArray tools)throws Exception{
         check();int estimated=RunGuard.estimate(messages);if(estimated>=guard.remaining())throw new RunGuard.Limit("Контекст запроса превышает оставшийся бюджет токенов. Начните новый чат или увеличьте бюджет.");
         JSONObject p=new JSONObject(profile.toString()).put("outputLimit",Math.min(4096,guard.remaining()-estimated));
-        JSONObject answer=Models.complete(p,messages,tools,this);JSONObject usage=answer.optJSONObject("_usage");
+        synchronized(this){run.put("streamText","");}
+        JSONObject answer=Models.complete(p,messages,tools,this,delta->{synchronized(this){try{run.put("streamText",redact(run.optString("streamText")+delta));}catch(Exception ignored){}}});
+        synchronized(this){run.remove("streamText");}JSONObject usage=answer.optJSONObject("_usage");
         int count=usage==null?estimated+Math.max(1,answer.toString().length()/3):usage.optInt("total_tokens",usage.optInt("input_tokens",usage.optInt("prompt_tokens"))+usage.optInt("output_tokens",usage.optInt("completion_tokens")));
         guard.account(count);synchronized(this){run.put("tokens",guard.used()).put("tokenEstimated",usage==null).put("maxTokens",app.vault.get().optInt("maxTokens",60000));}return answer;
     }
