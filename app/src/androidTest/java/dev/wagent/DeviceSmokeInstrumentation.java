@@ -19,6 +19,18 @@ public final class DeviceSmokeInstrumentation extends Instrumentation {
     @Override public void onStart(){
         Bundle result=new Bundle();UiAutomation automation=null;
         try{
+            // Headless SwiftShader can terminate the emulator during WebView compositing.
+            // Exercise the release APK through Android's software renderer in this test only.
+            ((Application)getTargetContext().getApplicationContext()).registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks(){
+                @Override public void onActivityPreCreated(Activity activity,Bundle state){activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);}
+                @Override public void onActivityCreated(Activity activity,Bundle state){}
+                @Override public void onActivityStarted(Activity activity){}
+                @Override public void onActivityResumed(Activity activity){}
+                @Override public void onActivityPaused(Activity activity){}
+                @Override public void onActivityStopped(Activity activity){}
+                @Override public void onActivitySaveInstanceState(Activity activity,Bundle state){}
+                @Override public void onActivityDestroyed(Activity activity){}
+            });
             automation=getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
             Activity activity=startActivitySync(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync();
