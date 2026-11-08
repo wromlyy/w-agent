@@ -128,4 +128,24 @@ public class ApiContractTest {
         respond("{\"key\":\"test-user-controlled-key\"}");assertEquals("test-user-controlled-key",OpenRouterAuth.exchange(flow,"test-code",2000,()->false));
         JSONObject request=sent.get(0).json();assertEquals(flow.getString("verifier"),request.getString("code_verifier"));assertEquals("test-code",request.getString("code"));assertNull(sent.get(0).getRequestProperty("Authorization"));
     }
+    @Test public void responsesPreservesReasoningItemsAndCallIdsAcrossToolTurns()throws Exception{
+        JSONObject p=profile("responses").put("thinking","on").put("effort","xhigh");
+        respond("{\"output\":[{\"type\":\"reasoning\",\"id\":\"rs_1\",\"summary\":[],\"encrypted_content\":\"opaque-test\"},{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_r\",\"name\":\"device\",\"arguments\":\"{\\\"action\\\":\\\"read_screen\\\"}\"}]}");
+        JSONArray ms=messages();JSONObject answer=Models.complete(p,ms,tools(),()->false);assertEquals("call_r",answer.getJSONArray("tool_calls").getJSONObject(0).getString("id"));
+        assertEquals("/v1/responses",sent.get(0).getURL().getPath());assertEquals("xhigh",sent.get(0).json().getJSONObject("reasoning").getString("effort"));assertFalse(sent.get(0).json().getBoolean("store"));
+        ms.put(answer).put(new JSONObject().put("role","tool").put("tool_call_id","call_r").put("content","screen"));
+        respond("{\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Done\"}]}]}");
+        assertEquals("Done",Models.complete(p,ms,tools(),()->false).getString("content"));JSONArray input=sent.get(1).json().getJSONArray("input");
+        assertEquals("opaque-test",input.getJSONObject(2).getString("encrypted_content"));assertEquals("call_r",input.getJSONObject(4).getString("call_id"));
+    }
+    @Test public void reasoningMapsToOpenRouterAndAnthropicWithoutLosingSignedContent()throws Exception{
+        JSONObject router=profile("compatible").put("base","https://openrouter.ai/api/v1").put("thinking","on").put("effort","high");
+        respond("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ok\"}}]}");Models.complete(router,messages(),tools(),()->false);
+        assertEquals("high",sent.get(0).json().getJSONObject("reasoning").getString("effort"));assertFalse(sent.get(0).json().has("reasoning_effort"));
+        JSONObject anthropic=profile("anthropic").put("thinking","on").put("effort","high");
+        respond("{\"content\":[{\"type\":\"thinking\",\"thinking\":\"provider-returned\",\"signature\":\"signed-test\"},{\"type\":\"tool_use\",\"id\":\"t2\",\"name\":\"device\",\"input\":{\"action\":\"read_screen\"}}]}");
+        JSONArray ms=messages();JSONObject answer=Models.complete(anthropic,ms,tools(),()->false);assertEquals(8192,sent.get(1).json().getJSONObject("thinking").getInt("budget_tokens"));
+        ms.put(answer).put(new JSONObject().put("role","tool").put("tool_call_id","t2").put("content","screen"));respond("{\"content\":[{\"type\":\"text\",\"text\":\"ok\"}]}");Models.complete(anthropic,ms,tools(),()->false);
+        assertEquals("signed-test",sent.get(2).json().getJSONArray("messages").getJSONObject(1).getJSONArray("content").getJSONObject(0).getString("signature"));
+    }
 }

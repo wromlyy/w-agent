@@ -21,10 +21,15 @@ public class DeviceService extends AccessibilityService {
     private View overlay;
     private CompletableFuture<Boolean> pendingApproval;
     private int counter;
-    @Override public void onServiceConnected(){live=this;wm=getSystemService(WindowManager.class);}
+    @Override public void onServiceConnected(){
+        super.onServiceConnected();
+        try{wm=getSystemService(WindowManager.class);AccessibilityServiceInfo info=getServiceInfo();if(info!=null){info.eventTypes=AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED|AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;info.feedbackType=AccessibilityServiceInfo.FEEDBACK_GENERIC;info.notificationTimeout=150;info.flags|=AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS|AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;setServiceInfo(info);}live=this;DeviceStatus.record(this,"connected",null);}
+        catch(RuntimeException e){live=null;DeviceStatus.record(this,"connection-error",e);}
+    }
     @Override public void onAccessibilityEvent(AccessibilityEvent event){}
-    @Override public void onInterrupt(){}
-    @Override public void onDestroy(){live=null;((WApp)getApplication()).agent.stop();removeOverlay();super.onDestroy();}
+    @Override public void onInterrupt(){DeviceStatus.record(this,"interrupted",null);}
+    @Override public boolean onUnbind(Intent intent){if(live==this)live=null;cancelApproval();removeOverlay();DeviceStatus.record(this,"unbound",null);return super.onUnbind(intent);}
+    @Override public void onDestroy(){if(live==this)live=null;((WApp)getApplication()).agent.stop();cancelApproval();removeOverlay();clearNodes();DeviceStatus.record(this,"destroyed",null);super.onDestroy();}
     public <T> T ui(Callable<T> action) throws Exception {
         if(Looper.myLooper()==Looper.getMainLooper())return action.call();
         FutureTask<T> task=new FutureTask<>(action); main.post(task);return task.get(8,TimeUnit.SECONDS);
@@ -138,7 +143,7 @@ public class DeviceService extends AccessibilityService {
         finally{pendingApproval=null;main.post(()->{removeOverlay();if(((WApp)getApplication()).agent.running())showStop();});}
     }
     public void cancelApproval(){CompletableFuture<Boolean> p=pendingApproval;if(p!=null)p.complete(false);}
-    public void showStop(){main.post(()->showOverlay(false,"W  ·  Остановить",null,null));}
+    public void showStop(){main.post(()->{try{if(live==this)showOverlay(false,"W  ·  Остановить",null,null);}catch(RuntimeException e){DeviceStatus.record(this,"overlay-error",e);removeOverlay();}});}
     public void hideStop(){main.post(this::removeOverlay);}
     private void showOverlay(boolean approval,String title,String detail,CompletableFuture<Boolean> answer){
         removeOverlay();LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(28,20,28,20);

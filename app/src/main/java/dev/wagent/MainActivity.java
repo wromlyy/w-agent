@@ -26,6 +26,7 @@ public class MainActivity extends Activity {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private String pickerId,pickerMode;
     private JSONObject exportData;
+    private String saveOutputId;
     private WApp app(){return (WApp)getApplication();}
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
@@ -75,12 +76,34 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void post(String raw){
             io.execute(()->{String id="";try{JSONObject req=new JSONObject(raw);id=req.getString("id");String op=req.getString("op");JSONObject args=req.optJSONObject("args");if(args==null)args=new JSONObject();Object result=null;
                 switch(op){
-                    case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("run",app().agent.state()).put("version","0.2.0");break;}
-                    case "state":result=new JSONObject().put("run",app().agent.state()).put("accessibility",DeviceService.live!=null);break;
+                    case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("device",DeviceStatus.get(MainActivity.this)).put("run",app().agent.state()).put("version","0.2.0");break;}
+                    case "state":result=new JSONObject().put("run",app().agent.state()).put("device",DeviceStatus.get(MainActivity.this)).put("accessibility",DeviceService.live!=null);break;
+                    case "reconnect":handler.post(()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));result=true;break;
+                    case "deviceTest":{
+                        DeviceService service=DeviceService.live;if(service==null)throw new IllegalStateException(DeviceStatus.enabled(MainActivity.this)?"Служба включена, но Android её не подключил. Нажмите Восстановить, затем выключите и включите W Agent в специальных возможностях, если подключение не появится.":"Сначала включите W Agent в специальных возможностях");
+                        JSONObject screen=new JSONObject(service.screen());result=new JSONObject().put("connected",true).put("elements",screen.getJSONArray("elements").length()).put("screenAvailable",screen.has("package"));break;
+                    }
                     case "save":app().vault.updateSettings(args);applyTheme();result=true;break;
                     case "run":app().agent.start(args.getString("task"),args.optJSONArray("files"));result=true;break;
                     case "stop":app().agent.stop();result=true;break;
                     case "newChat":app().agent.newChat();result=true;break;
+                    case "chatSelect":app().agent.selectChat(args.getString("chatId"));result=true;break;
+                    case "copyText":{String value=args.getString("text");handler.post(()->getSystemService(android.content.ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("W Agent",value)));result=true;break;}
+                    case "folders":result=new FilesStore(app()).folders();break;
+                    case "folderRemove":new FilesStore(app()).removeFolder(args.getString("id"));result=true;break;
+                    case "fileList":result=new FilesStore(app()).list(args.getString("folder"),args.optString("path"));break;
+                    case "fileAttach":result=new FilesStore(app()).attachment(args.getString("folder"),args.getString("path"));break;
+                    case "fileDeliver":result=new FilesStore(app()).attach(args.getString("folder"),args.getString("path"));break;
+                    case "fileOutput":result=new FilesStore(app()).output(args.getString("name"),args.getString("content"));break;
+                    case "fileShare":{
+                        String fileId=args.getString("id");JSONObject file=new FilesStore(app()).outputInfo(fileId);Uri uri=Uri.parse("content://dev.wagent.files/output/"+fileId);
+                        Intent share=new Intent(Intent.ACTION_SEND).setType(file.getString("mime")).putExtra(Intent.EXTRA_STREAM,uri).putExtra(Intent.EXTRA_TITLE,file.getString("name")).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);share.setClipData(ClipData.newRawUri(file.getString("name"),uri));handler.post(()->startActivity(Intent.createChooser(share,"Поделиться файлом")));result=true;break;
+                    }
+                    case "fileSave":{
+                        String outputId=args.getString("id");JSONObject file=new FilesStore(app()).outputInfo(outputId);String callback=id;
+                        handler.post(()->{if(pickerId!=null){reply(callback,null,"Выбор файла уже открыт");return;}pickerId=callback;pickerMode="saveOutput";saveOutputId=outputId;startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType(file.optString("mime","text/plain")).addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,file.optString("name","file.txt")),51);});return;
+                    }
+                    case "folderPick":{String callback=id;handler.post(()->{if(pickerId!=null){reply(callback,null,"Выбор файла уже открыт");return;}pickerId=callback;pickerMode="folder";startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION),51);});return;}
                     case "models":result=Models.models(args,()->false);break;
                     case "freeModels":result=Models.freeModels(()->false);break;
                     case "authBegin":{
@@ -129,6 +152,12 @@ public class MainActivity extends Activity {
         String id=pickerId,mode=pickerMode;pickerId=null;pickerMode=null;
         if(result!=RESULT_OK||data==null){reply(id,new JSONArray(),null);return;}
         io.execute(()->{try{
+            if("folder".equals(mode)){
+                Uri tree=data.getData();if(tree==null)throw new IOException("Папка не выбрана");int grants=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);getContentResolver().takePersistableUriPermission(tree,grants);reply(id,new FilesStore(app()).addFolder(tree),null);return;
+            }
+            if("saveOutput".equals(mode)){
+                FilesStore store=new FilesStore(app());try(InputStream in=new FileInputStream(store.outputFile(saveOutputId));OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new IOException("Файл недоступен для записи");byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}saveOutputId=null;reply(id,true,null);return;
+            }
             if("export".equals(mode)){
                 try(OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new IOException("Файл недоступен");out.write(new JSONObject().put("app","W Agent").put("history",exportData.getJSONArray("history")).toString(2).getBytes(StandardCharsets.UTF_8));}exportData=null;reply(id,true,null);return;
             }
