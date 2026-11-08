@@ -35,6 +35,7 @@ public final class Models {
             if(!"https://openrouter.ai/api/v1".equals(base.replaceAll("/+$","")))throw new IllegalArgumentException("Бесплатное подключение использует OpenRouter");
             JSONObject available=findFree(model,freeModels(cancel));
             if(available==null)throw new IllegalStateException("Модель больше не указана как бесплатная. Обновите каталог или выберите openrouter/free.");
+            boolean images=false;for(int i=0;i<messages.length();i++){JSONArray parts=messages.getJSONObject(i).optJSONArray("content");if(parts!=null)for(int j=0;j<parts.length();j++)if("image_url".equals(parts.getJSONObject(j).optString("type")))images=true;}if(images&&!available.optBoolean("vision"))throw new IllegalStateException("Эта бесплатная модель не принимает изображения. Выберите модель с отметкой Фото в каталоге.");
             if(tools.length()>0&&!available.optBoolean("tools"))throw new IllegalStateException("Эта бесплатная модель подходит только для чата. Выберите режим Чат в подключении.");
             request.put("provider",new JSONObject().put("max_price",new JSONObject().put("prompt",0).put("completion",0).put("request",0).put("image",0)));
         }
