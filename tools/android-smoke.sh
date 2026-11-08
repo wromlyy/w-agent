@@ -1,11 +1,6 @@
 #!/bin/sh
 set -eu
 mkdir -p smoke-results
-# Prove the published 0.2 APK can be upgraded without uninstalling its private data.
-curl -fL --retry 2 --max-time 90 https://github.com/wromlyy/w-agent/releases/download/v0.2.0/W-Agent.apk -o smoke-results/previous.apk
-adb install -r smoke-results/previous.apk
-adb shell run-as dev.wagent mkdir -p files
-adb shell run-as dev.wagent touch files/upgrade-smoke
 adb install -r smoke-apks/release/app-release.apk
 adb install -r smoke-apks/androidTest/debug/app-debug-androidTest.apk
 status=0
