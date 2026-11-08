@@ -26,7 +26,7 @@ function native(op,args={}){return new Promise((resolve,reject)=>{const id=Strin
 let settings={profiles:[],services:[],skills:[],history:[],theme:'light',vision:false,maxSteps:30},run={},accessibility=false,page='chat',connectionTab='models',appsCache=null,files=[],draft='',viewingHistory=false,lastRunKey='',busy=false,freeCatalog=null,freeError='',freeLoading=false,version='0.3.1',device={},folderId='',folderPath='',lastRenderedChat='';
 const $=s=>document.querySelector(s);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
-const active=()=>settings.profiles.find(p=>p.id===settings.activeProfile);
+const active=()=>{const role=(settings.roles||[]).find(r=>r.id===(settings.activeRole||'general'));return settings.profiles.find(p=>p.id===(role?.modelProfile||settings.activeProfile));};
 function toast(text){const t=$('#toast');t.textContent=text;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),4000);}
 function theme(){const root=document.documentElement;root.dataset.theme=settings.theme||'light';root.dataset.amoled=settings.amoled?'true':'false';root.dataset.density=settings.density||'comfortable';root.dataset.glass=settings.glass===false?'false':'true';root.style.setProperty('--chat-font',(Number(settings.fontSize)||14)+'px');root.style.setProperty('--glass-blur',(Number(settings.glassBlur)||20)+'px');root.style.setProperty('--glass-opacity',String(Math.max(.3,Math.min(.95,Number(settings.glassOpacity||68)/100))));const accent=/^#[0-9a-f]{6}$/i.test(settings.accent||'')?settings.accent:settings.materialYou&&settings.systemAccent?settings.systemAccent:null;if(accent)root.style.setProperty('--green',accent);else root.style.removeProperty('--green');if(/^#[0-9a-f]{6}$/i.test(settings.background||''))root.style.setProperty('--custom-bg',settings.background);else root.style.removeProperty('--custom-bg');}
 async function save(){await native('save',settings);}
@@ -216,7 +216,7 @@ async function handle(action,el){
   case 'attach':{const added=await native('pick',{mode:'files'});if(files.length+added.length>6){toast('Максимум 6 файлов');return;}files.push(...added);renderComposer();break;}
   case 'removeFile':files=files.filter(f=>f.id!==el.dataset.id);renderComposer();break;
   case 'chooseModel':await chooseModel();break;
-  case 'activateProfile':settings.activeProfile=el.dataset.id;await save();closeModal();head();renderComposer();toast('Модель выбрана');break;
+  case 'activateProfile':settings.activeProfile=el.dataset.id;{const role=(settings.roles||[]).find(r=>r.id===(settings.activeRole||'general'));if(role?.modelProfile)role.modelProfile=el.dataset.id;}await save();closeModal();head();renderComposer();toast('Модель выбрана');break;
   case 'addProfile':profileEditor();break;
   case 'presetNew':profileEditor(null,el.dataset.preset);break;
   case 'editProfile':profileEditor(settings.profiles.find(p=>p.id===el.dataset.id));break;

@@ -41,7 +41,7 @@ public final class Agent implements Net.Cancel {
     private synchronized void startInternal(String task,JSONArray attachments,JSONArray macro) throws Exception {
         if(running)throw new IllegalStateException("Сначала остановите текущую задачу");
         if(task.trim().isEmpty())throw new IllegalArgumentException("Напишите задачу");
-        app.workspace();JSONObject settings=app.vault.get();role=Roles.active(settings);JSONArray profiles=settings.getJSONArray("profiles");JSONObject chosen=null;
+        String workspaceId=app.workspace();JSONObject settings=app.vault.get();if("background".equals(settings.optString("agentMode")))settings.put("projectFolder",workspaceId);role=Roles.active(settings);JSONArray profiles=settings.getJSONArray("profiles");JSONObject chosen=null;
         for(int i=0;i<profiles.length();i++)if(profiles.getJSONObject(i).getString("id").equals(role.optString("modelProfile").isEmpty()?settings.optString("activeProfile"):role.getString("modelProfile")))chosen=profiles.getJSONObject(i);
         if(chosen==null&&macro==null)throw new IllegalStateException("Добавьте подключение модели в настройках");if(chosen==null)chosen=new JSONObject();if(macro!=null)settings.put("_macro",macro);
         if(macro==null&&chosen.optString("model").trim().isEmpty())throw new IllegalStateException("Укажите модель в настройках подключения");
@@ -173,7 +173,7 @@ public final class Agent implements Net.Cancel {
         if("ask_all".equals(role.optString("trust"))){DeviceService d=DeviceService.live;boolean yes=d!=null?d.approve("Разрешить шаг агента?",name+"\n"+redact(a.toString())):MainActivity.approve("Разрешить шаг агента?",name+"\n"+redact(a.toString()));if(!yes)return "Шаг отклонён. Не повторять.";check();}
         if("browser".equals(name))return app.browser.execute(a,this);
         if("web".equals(name))return WebTools.execute(a,settings,this);
-        if("project".equals(name))return new Project(app).execute(a);
+        if("project".equals(name)){if("background".equals(settings.optString("agentMode"))&&!a.has("folder"))a.put("folder",app.workspace());return new Project(app).execute(a);}
         if("memory".equals(name)){
             String action=a.getString("action");if("list".equals(action))return app.vault.get().optJSONArray("memories")==null?"[]":app.vault.get().getJSONArray("memories").toString();
             String text=a.optString("text");if(text.length()>4000)throw new IllegalArgumentException("Заметка слишком длинная");if(!Arrays.asList("remember","forget","project_summary").contains(action))throw new IllegalArgumentException("Неизвестное действие памяти");
