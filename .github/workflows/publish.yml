@@ -1,0 +1,48 @@
+name: Publish verified 0.3 release
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Build APK run ID to publish
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN: ${{ inputs.build_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require successful main-branch build and device checks
+        id: verified
+        shell: bash
+        run: |
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
+          jq -e '.status == "completed" and .conclusion == "success" and .head_branch == "main" and .event == "push" and .name == "Build APK"' run.json
+          build_sha=$(jq -r .head_sha run.json)
+          [[ "$build_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$build_sha" >> "$GITHUB_OUTPUT"
+      - name: Download APK and corresponding Linux sources on GitHub
+        run: |
+          gh run download "$BUILD_RUN" -n W-Agent-APK -D release-assets
+          gh run download "$BUILD_RUN" -n W-Agent-Linux-Sources -D release-assets
+      - name: Check APK checksum
+        working-directory: release-assets
+        run: |
+          sha256sum -c W-Agent.apk.sha256
+          test -s W-Agent-Linux-Sources.tar.gz
+      - name: Publish APK and source archive
+        env:
+          BUILD_SHA: ${{ steps.verified.outputs.sha }}
+        shell: bash
+        run: |
+          sed "s/{{BUILD_RUN}}/$BUILD_RUN/g" .github/release-v03.md > release-notes.md
+          gh release create v0.3.0 release-assets/W-Agent.apk release-assets/W-Agent.apk.sha256 release-assets/W-Agent-Linux-Sources.tar.gz --target "$BUILD_SHA" --title 'W Agent 0.3' --draft --prerelease --notes-file release-notes.md
+          gh release edit v0.3.0 --draft=false --prerelease
