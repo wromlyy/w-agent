@@ -39,7 +39,7 @@ public final class Vault {
     }
     private JSONObject defaults() throws JSONException {
         return new JSONObject().put("profiles", new JSONArray()).put("services", new JSONArray()).put("skills",new JSONArray()).put("history", new JSONArray())
-            .put("activeProfile", "").put("vision", false).put("theme", "light").put("maxSteps", 30);
+            .put("autoLocal",true).put("agentMode","background").put("activeProfile", "").put("vision", false).put("theme", "light").put("maxSteps", 30);
     }
     public synchronized JSONObject get() { try { return new JSONObject(state.toString()); } catch (Exception e) { throw new IllegalStateException(e); } }
     public synchronized void save(JSONObject next) throws Exception {
@@ -52,7 +52,7 @@ public final class Vault {
     public synchronized void updateSettings(JSONObject settings) throws Exception {
         JSONObject next = get();
         if(settings.has("roles"))Roles.validate(settings.getJSONArray("roles"));
-        for (String k : new String[]{"profiles", "services", "skills", "activeProfile", "vision", "theme", "maxSteps", "maxSeconds", "maxTokens", "doubleCheck", "teamMode", "agentMode", "projectFolder", "roles", "activeRole", "searchService", "prompts", "fontSize", "density", "accent", "amoled", "materialYou", "blockedApps", "allowedApps"}) if (settings.has(k)) next.put(k, settings.get(k));
+        for (String k : new String[]{"profiles", "services", "skills", "activeProfile", "vision", "theme", "maxSteps", "maxSeconds", "maxTokens", "doubleCheck", "teamMode", "agentMode", "projectFolder", "roles", "activeRole", "searchService", "prompts", "fontSize", "density", "accent", "amoled", "materialYou","autoLocal","glass","glassOpacity","glassBlur","background", "blockedApps", "allowedApps"}) if (settings.has(k)) next.put(k, settings.get(k));
         save(next);
     }
     public synchronized void patch(String key,Object value)throws Exception{save(get().put(key,value));}
