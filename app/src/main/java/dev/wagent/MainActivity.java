@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
         web=new WebView(this);web.setBackgroundColor(Color.rgb(245,244,240));setContentView(web);
+        applyTheme();
         if(Build.VERSION.SDK_INT>=35){getWindow().setDecorFitsSystemWindows(false);web.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});}
         WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(false);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         web.setWebViewClient(new WebViewClient(){
@@ -48,6 +49,12 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(),"WNative");web.loadUrl("https://app.wagent.local/index.html");
     }
     @Override protected void onResume(){super.onResume();foreground=new java.lang.ref.WeakReference<>(this);if(web!=null)web.onResume();}
+    private void applyTheme(){runOnUiThread(()->{
+        boolean dark="dark".equals(app().vault.get().optString("theme"));int background=dark?Color.rgb(23,27,24):Color.rgb(245,244,240);
+        getWindow().setStatusBarColor(background);getWindow().setNavigationBarColor(background);if(web!=null)web.setBackgroundColor(background);
+        getWindow().getDecorView().setBackgroundColor(background);
+        if(Build.VERSION.SDK_INT>=30){WindowInsetsController c=getWindow().getInsetsController();if(c!=null)c.setSystemBarsAppearance(dark?0:WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);}else{int flags=getWindow().getDecorView().getSystemUiVisibility();int mask=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;getWindow().getDecorView().setSystemUiVisibility(dark?flags&~mask:flags|mask);}
+    });}
     @Override protected void onPause(){foreground.clear();if(web!=null)web.onPause();super.onPause();}
     public static boolean approve(String title,String detail) throws Exception {
         MainActivity a=foreground.get();if(a==null)throw new IllegalStateException("Откройте W Agent для подтверждения действия сервиса");
@@ -70,7 +77,7 @@ public class MainActivity extends Activity {
                 switch(op){
                     case "init":{JSONObject visible=app().vault.get();visible.remove("pendingAuth");result=new JSONObject().put("settings",visible).put("accessibility",DeviceService.live!=null).put("run",app().agent.state()).put("version","0.2.0");break;}
                     case "state":result=new JSONObject().put("run",app().agent.state()).put("accessibility",DeviceService.live!=null);break;
-                    case "save":app().vault.updateSettings(args);result=true;break;
+                    case "save":app().vault.updateSettings(args);applyTheme();result=true;break;
                     case "run":app().agent.start(args.getString("task"),args.optJSONArray("files"));result=true;break;
                     case "stop":app().agent.stop();result=true;break;
                     case "newChat":app().agent.newChat();result=true;break;
