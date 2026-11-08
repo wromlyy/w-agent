@@ -82,7 +82,7 @@ public final class Models {
     private static int thinkingBudget(JSONObject p)throws Exception{return switch(effort(p)){case "minimal","low"->1024;case "high"->8192;case "xhigh","max"->16384;default->4096;};}
     private static JSONObject responses(JSONObject p,JSONArray messages,JSONArray tools,Net.Cancel cancel)throws Exception{
         JSONArray input=new JSONArray(),definitions=new JSONArray();
-        for(int i=0;i<tools.length();i++){JSONObject f=tools.getJSONObject(i).getJSONObject("function");definitions.put(new JSONObject().put("type","function").put("name",f.getString("name")).put("description",f.optString("description")).put("parameters",f.getJSONObject("parameters")));}
+        for(int i=0;i<tools.length();i++){JSONObject f=tools.getJSONObject(i).getJSONObject("function");definitions.put(new JSONObject().put("type","function").put("name",f.getString("name")).put("description",f.optString("description")).put("parameters",f.getJSONObject("parameters")).put("strict",false));}
         for(int i=0;i<messages.length();i++){
             JSONObject m=messages.getJSONObject(i);String role=m.getString("role");
             if("tool".equals(role)){input.put(new JSONObject().put("type","function_call_output").put("call_id",m.getString("tool_call_id")).put("output",m.getString("content")));continue;}
