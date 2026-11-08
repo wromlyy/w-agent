@@ -23,7 +23,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 let seq=0;const pending=new Map();
 window.nativeReply=(id,value,error)=>{const p=pending.get(id);if(!p)return;pending.delete(id);error?p.reject(Error(error)):p.resolve(value);};
 function native(op,args={}){return new Promise((resolve,reject)=>{const id=String(++seq);pending.set(id,{resolve,reject});if(!window.WNative){pending.delete(id);reject(Error('Откройте приложение на Android'));return;}window.WNative.post(JSON.stringify({id,op,args}));});}
-let settings={profiles:[],services:[],skills:[],history:[],theme:'light',vision:false,maxSteps:30},run={},accessibility=false,page='chat',connectionTab='models',appsCache=null,files=[],draft='',viewingHistory=false,lastRunKey='',busy=false,freeCatalog=null,freeError='',freeLoading=false,version='0.2.0',device={},folderId='',folderPath='',lastRenderedChat='';
+let settings={profiles:[],services:[],skills:[],history:[],theme:'light',vision:false,maxSteps:30},run={},accessibility=false,page='chat',connectionTab='models',appsCache=null,files=[],draft='',viewingHistory=false,lastRunKey='',busy=false,freeCatalog=null,freeError='',freeLoading=false,version='0.3.0',device={},folderId='',folderPath='',lastRenderedChat='';
 const $=s=>document.querySelector(s);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const active=()=>settings.profiles.find(p=>p.id===settings.activeProfile);

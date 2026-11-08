@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 mkdir -p smoke-results
-adb install -r smoke-apks/debug/app-debug.apk
+adb install -r smoke-apks/release/app-release.apk
 adb install -r smoke-apks/androidTest/debug/app-debug-androidTest.apk
 status=0
 timeout 540s adb shell am instrument -w dev.wagent.test/dev.wagent.DeviceSmokeInstrumentation > smoke-results/instrumentation.txt || status=$?

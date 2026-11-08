@@ -64,13 +64,22 @@ jobs:
       - name: Build native PTY bridge
         run: sh tools/build-pty.sh
       - name: Build installable APK
-        run: sh gradlew assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest --stacktrace
+        run: sh gradlew assembleDebug assembleDebugAndroidTest lintDebug testDebugUnitTest assembleRelease lintRelease --stacktrace
       - name: Name APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk W-Agent.apk
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk W-Agent.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs W-Agent.apk > apk-signature.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging W-Agent.apk > apk-package.txt
+          if grep -q 'application-debuggable' apk-package.txt; then exit 1; fi
+          sha256sum W-Agent.apk > W-Agent.apk.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: W-Agent-APK
-          path: W-Agent.apk
+          path: |
+            W-Agent.apk
+            W-Agent.apk.sha256
+            apk-signature.txt
+            apk-package.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -80,7 +89,7 @@ jobs:
         with:
           name: android-smoke-apks
           path: |
-            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
   android14:
     timeout-minutes: 18
